@@ -1,0 +1,62 @@
+Processing Subset6...
+Processing Subset10...
+Base GRN: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/data/mouse_base_grn.tsv.gz
+Base GRN: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/data/mouse_base_grn.tsv.gz
+Expression file: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/tmp_dynamic/Subset6/expression0.tsv.gz
+Expression file: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/tmp_dynamic/Subset10/expression0.tsv.gz
+Output file: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/tmp_dynamic/Subset6/binlinking.tsv.gz
+Output file: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/tmp_dynamic/Subset10/binlinking.tsv.gz
+
+CommandNotFoundError: Your shell has not been properly configured to use 'conda deactivate'.
+To initialize your shell, run
+
+    $ conda init <SHELL_NAME>
+
+Currently supported shells are:
+  - bash
+  - fish
+  - tcsh
+  - xonsh
+  - zsh
+  - powershell
+
+See 'conda init --help' for more information and options.
+
+IMPORTANT: You may need to close and restart your shell after running 'conda init'.
+
+
+
+CommandNotFoundError: Your shell has not been properly configured to use 'conda deactivate'.
+To initialize your shell, run
+
+    $ conda init <SHELL_NAME>
+
+Currently supported shells are:
+  - bash
+  - fish
+  - tcsh
+  - xonsh
+  - zsh
+  - powershell
+
+See 'conda init --help' for more information and options.
+
+IMPORTANT: You may need to close and restart your shell after running 'conda init'.
+
+
+Expression matrix has 13435 genes
+Expression matrix shape: (13435, 501)
+Base GRN has 739 TFs and 21256 targets
+After filtering TFs: 401 TFs remain
+After filtering targets: 10831 target genes remain
+Final filtered GRN shape: (401, 10832)
+Saved filtered GRN to: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/tmp_dynamic/Subset10/binlinking.tsv.gz
+Expression matrix has 13462 genes
+Expression matrix shape: (13462, 501)
+Base GRN has 739 TFs and 21256 targets
+After filtering TFs: 405 TFs remain
+After filtering targets: 10838 target genes remain
+Final filtered GRN shape: (405, 10839)
+Saved filtered GRN to: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/tmp_dynamic/Subset6/binlinking.tsv.gz
+Processing completed for Subset10
+Processing completed for Subset6
