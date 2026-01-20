@@ -1,0 +1,20 @@
+---
+x_path: .../X.csv
+y_path: .../Y.csv
+out_path: .../SLIDE/out
+delta:
+  - 0.1
+  - 0.2
+lambda:
+  - 1
+spec: 0.25
+y_factor: TRUE
+y_levels:
+  - 0
+  - 1
+eval_type: auc
+SLIDE_iter: 2000
+SLIDE_top_feats: 20
+sampleCV_iter: 50
+sampleCV_K: 20
+do_interacts: TRUE
