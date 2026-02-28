@@ -11,6 +11,7 @@ import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 from typing import Optional, Tuple, Union
+import pickle
 
 import dictys
 import matplotlib
@@ -76,7 +77,6 @@ class AlignTimeScales:
         # return numpy array of pseudotime values
         return dx.to_numpy()
 
-
 class EpisodeDynamics:
     """
     workflow for episodic grn extraction, filtering, force calculation, and enrichment.
@@ -96,7 +96,7 @@ class EpisodeDynamics:
         self.n_processes = n_processes
         
         # Initialize composed objects with same parameters
-        self.curves = SmoothedCurves(
+        self.curves = SmoothedCurvesGRN(
             dictys_dynamic_object=dictys_dynamic_object,
             trajectory_range=trajectory_range,
             num_points=num_points,
@@ -845,7 +845,7 @@ def calculate_force_curves_parallel(
 
     return force_curves_result
 
-def run_episode(
+def run_episodic_enrichment(
     episode_idx,
     dictys_dynamic_object_path,
     output_folder,
@@ -881,4 +881,39 @@ def run_episode(
     # save to CSV
     out_path = os.path.join(output_folder, f'enrichment_episode_{episode_idx}.csv')
     enrichment_df.to_csv(out_path, index=False)
+    return out_path
+
+def run_episodic_construction(
+    episode_idx,
+    dictys_dynamic_object_path,
+    output_folder,
+    trajectory_range,
+    num_points,
+    time_slice_start,
+    time_slice_end,
+    dist=0.001,
+    sparsity=0.01,
+    percentile=98
+):
+    # Load dictys object inside the process
+    dictys_dynamic_object = dictys.net.dynamic_network.from_file(dictys_dynamic_object_path)
+    epi = EpisodeDynamics(
+        dictys_dynamic_object=dictys_dynamic_object,
+        output_folder=output_folder,
+        mode="expression",
+        trajectory_range=trajectory_range,
+        num_points=num_points,
+        dist=dist,
+        sparsity=sparsity
+    )
+    epi.compute_expression_curves()
+    epi.build_episode_grn(time_slice=slice(time_slice_start, time_slice_end))
+    epi.filter_edges()
+    epi.compute_tf_expression()
+    epi.calculate_forces()
+    episodic_grn_edges = epi.select_top_edges(percentile)
+    # save to pickle
+    out_path = os.path.join(output_folder, f'episode_{episode_idx}.pkl')
+    with open(out_path, 'wb') as f:
+        pickle.dump(episodic_grn_edges, f)
     return out_path
