@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name="epi_grn_GC"
-#SBATCH --output="epi_grn_GC.log"  
+#SBATCH --job-name="epi_grn_GC_loose_threshold"
+#SBATCH --output="epi_grn_GC_loose_threshold.log"  
 #SBATCH -p RM-shared           
 #SBATCH -N 1            
 #SBATCH --ntasks-per-node=64 #for memory
@@ -28,10 +28,10 @@ traj_end=3
 num_points=40
 dist=0.001
 sparsity=0.01
-percentile=98
+percentile=94
 
-# Run enrichment 
-echo "Running enrichment for episode ${episode_idx}" 
+# Run episodic construction
+echo "Running episodic construction for episode ${episode_idx}" 
 
 ########################## Python script ##########################
 python -c "
