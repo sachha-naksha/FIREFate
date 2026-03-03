@@ -28,7 +28,7 @@ traj_end=3
 num_points=40
 dist=0.001
 sparsity=0.01
-percentile=94
+percentile=84
 
 # Run episodic construction
 echo "Running episodic construction for episode ${episode_idx}" 
