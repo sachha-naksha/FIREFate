@@ -3,6 +3,7 @@ import pandas as pd
 import ast
 from scipy.cluster.hierarchy import linkage, dendrogram, leaves_list
 from scipy.spatial.distance import squareform
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 def sort_tfs_by_gene_similarity(tf_genes_dict, method='jaccard_hierarchical', return_linkage=False):
@@ -421,3 +422,200 @@ def plot_tf_episodic_enrichment_dotplot(
         plt.show()
     
     return fig, plot_data_df, all_tfs_sorted
+
+def plot_tf_target_episodic_heatmap(
+    csv_path: str,
+    tf_col: str = "TF",
+    target_col: str = "target",
+    title: str = "TF–Target Edge Scores by Episode",
+    episode_label: str = "Episode",
+    figsize: tuple = (14, 7),
+    cell_annot: bool = True,
+    annot_fmt: str = ".2f",
+    cmap_colors: list = None,
+    vmin: float = None,
+    vmax: float = None,
+    cbar_label: str = "Edge Score",
+    tf_group_line_color: str = "black",
+    tf_group_line_width: float = 2.5,
+    save_path: str = None,
+    dpi: int = 150,
+):
+    """
+    Plot a styled heatmap of TF-target edge scores across episodes.
+
+    Parameters
+    ----------
+    csv_path : str
+        Path to the CSV file. Expected columns: tf_col, target_col, then one
+        column per episode (numeric).
+    tf_col : str
+        Name of the column containing transcription factor names.
+    target_col : str
+        Name of the column containing target gene names.
+    title : str
+        Plot title shown above the heatmap.
+    episode_label : str
+        Label shown above the episode columns.
+    figsize : tuple
+        Figure size (width, height) in inches.
+    cell_annot : bool
+        Whether to annotate each cell with its value.
+    annot_fmt : str
+        Number format string for cell annotations (e.g. ".2f", ".3f").
+    cmap_colors : list of str/colors
+        Three colors defining the colormap [negative, zero/center, positive].
+        Defaults to ['blue', 'white', 'gold'].
+    vmin, vmax : float or None
+        Color scale limits. If None, symmetric limits based on abs-max are used.
+    cbar_label : str
+        Label for the colorbar.
+    tf_group_line_color : str
+        Color of the horizontal divider lines between TF groups.
+    tf_group_line_width : float
+        Line width of TF group dividers.
+    save_path : str or None
+        If provided, saves the figure to this path instead of showing it.
+    dpi : int
+        Resolution when saving the figure.
+
+    Returns
+    -------
+    fig, ax : matplotlib Figure and Axes
+    """
+    # ------------------------------------------------------------------ #
+    # 1. Load & validate data
+    # ------------------------------------------------------------------ #
+    df = pd.read_csv(csv_path)
+
+    missing = {tf_col, target_col} - set(df.columns)
+    if missing:
+        raise ValueError(f"CSV is missing required columns: {missing}")
+
+    episode_cols = [c for c in df.columns if c not in (tf_col, target_col)]
+    if not episode_cols:
+        raise ValueError("No episode columns found after removing TF and target columns.")
+
+    # ------------------------------------------------------------------ #
+    # 2. Build matrix — rows ordered by TF group then target name
+    # ------------------------------------------------------------------ #
+    df = df.sort_values([tf_col, target_col]).reset_index(drop=True)
+
+    row_labels = df[target_col].tolist()
+    tf_labels  = df[tf_col].tolist()
+    matrix     = df[episode_cols].values.astype(float)
+
+    n_rows, n_cols = matrix.shape
+
+    # ------------------------------------------------------------------ #
+    # 3. Color scale
+    # ------------------------------------------------------------------ #
+    if cmap_colors is None:
+        cmap_colors = ["blue", "white", "gold"]
+    cmap = mpl.colors.LinearSegmentedColormap.from_list("custom", cmap_colors, N=256)
+
+    abs_max = np.max(np.abs(matrix))
+    vmin = vmin if vmin is not None else -abs_max
+    vmax = vmax if vmax is not None else  abs_max
+    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
+
+    # ------------------------------------------------------------------ #
+    # 4. Figure & axes
+    # ------------------------------------------------------------------ #
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # ------------------------------------------------------------------ #
+    # 5. Draw cells
+    # ------------------------------------------------------------------ #
+    for r in range(n_rows):
+        for c in range(n_cols):
+            val = matrix[r, c]
+            color = cmap(norm(val))
+            rect = mpl.patches.Rectangle(
+                (c, n_rows - r - 1), 1, 1,
+                facecolor=color,
+                edgecolor="#dddddd",
+                linewidth=0.4,
+            )
+            ax.add_patch(rect)
+
+            if cell_annot and val != 0:
+                # choose dark or light text based on cell brightness
+                rgba = mpl.colors.to_rgba(color)
+                brightness = 0.299*rgba[0] + 0.587*rgba[1] + 0.114*rgba[2]
+                txt_color = "black" if brightness > 0.5 else "white"
+                ax.text(
+                    c + 0.5, n_rows - r - 0.5,
+                    format(val, annot_fmt),
+                    ha="center", va="center",
+                    fontsize=8, color=txt_color,
+                )
+
+    ax.set_xlim(0, n_cols)
+    ax.set_ylim(0, n_rows)
+
+    # ------------------------------------------------------------------ #
+    # 6. Tick labels
+    # ------------------------------------------------------------------ #
+    # x-axis on top
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position("top")
+    ax.set_xticks(np.arange(n_cols) + 0.5)
+    ax.set_xticklabels(episode_cols, fontsize=11)
+    ax.set_xlabel(episode_label, fontsize=13, labelpad=8)
+
+    # y-axis: target names
+    ax.set_yticks(np.arange(n_rows) + 0.5)
+    ax.set_yticklabels(reversed(row_labels), fontsize=10)
+    ax.tick_params(axis="both", which="both", length=0)
+    ax.set_ylabel("")
+
+    # ------------------------------------------------------------------ #
+    # 7. TF group labels + divider lines
+    # ------------------------------------------------------------------ #
+    tfs_unique = list(dict.fromkeys(tf_labels))   # ordered, deduplicated
+
+    for tf in tfs_unique:
+        indices = [i for i, t in enumerate(tf_labels) if t == tf]
+        # center in flipped y coords
+        mid = n_rows - np.mean(indices) - 0.5
+        ax.text(
+            -0.3, mid, tf,
+            ha="right", va="center",
+            fontsize=11, fontweight="bold",
+            transform=ax.get_yaxis_transform(),
+            clip_on=False,
+        )
+        # divider below the last row of this group (in flipped coords: above)
+        boundary_y = n_rows - (indices[-1] + 1)
+        if boundary_y > 0:                        # skip the very last group
+            ax.axhline(
+                y=boundary_y,
+                color=tf_group_line_color,
+                linewidth=tf_group_line_width,
+            )
+
+    # ------------------------------------------------------------------ #
+    # 8. Colorbar
+    # ------------------------------------------------------------------ #
+    sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, shrink=0.6, pad=0.02)
+    cbar.set_label(cbar_label, fontsize=11)
+
+    # ------------------------------------------------------------------ #
+    # 9. Title & layout
+    # ------------------------------------------------------------------ #
+    ax.set_title(title, fontsize=14, fontweight="bold", pad=40)
+    plt.tight_layout()
+
+    # ------------------------------------------------------------------ #
+    # 10. Save or show
+    # ------------------------------------------------------------------ #
+    if save_path:
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        print(f"Figure saved to: {save_path}")
+    else:
+        plt.show()
+
+    return fig, ax
