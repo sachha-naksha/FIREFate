@@ -12,6 +12,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 from typing import Optional, Tuple, Union
 import pickle
+import glob
+import re
 
 import dictys
 import matplotlib
@@ -917,3 +919,74 @@ def run_episodic_construction(
     with open(out_path, 'wb') as f:
         pickle.dump(episodic_grn_edges, f)
     return out_path
+
+def get_episodic_grn_subset(
+    output_folder: str,
+    tfs_of_interest: list,
+    targets_of_interest: list,
+    value_col: str = 'avg_force'
+) -> pd.DataFrame:
+    """
+    Loop over all episode pkl files in output_folder, subset edges to the
+    TFs and targets of interest, and return a wide DataFrame where:
+      - rows    = (tf, target) edge multi-index
+      - columns = episode index (0, 1, 2, ...)
+      - values  = avg_force for that edge in that episode, or 0 if absent
+
+    Parameters
+    ----------
+    output_folder       : directory containing episode_0.pkl, episode_1.pkl, ...
+    tfs_of_interest     : list of TF names to keep
+    targets_of_interest : list of target gene names to keep
+    value_col           : column in each episode df holding the edge weight
+                          (default: 'avg_force')
+
+    Returns
+    -------
+    pd.DataFrame  shape = (n_edges, n_episodes)
+    """
+    # ------------------------------------------------------------------ #
+    # 1. Discover all episode pkl files, sorted by episode index           #
+    # ------------------------------------------------------------------ #
+    pattern = os.path.join(output_folder, 'episode_*.pkl')
+    episode_files = sorted(
+        glob.glob(pattern),
+        key=lambda p: int(re.search(r'episode_(\d+)\.pkl', p).group(1))
+    )
+
+    if not episode_files:
+        raise FileNotFoundError(f"No episode pkl files found in: {output_folder}")
+
+    # ------------------------------------------------------------------ #
+    # 2. Build the union of edges present across all episodes              #
+    # ------------------------------------------------------------------ #
+    episode_series = {}   # {episode_idx: pd.Series indexed by (tf, target)}
+
+    for fpath in episode_files:
+        ep_idx = int(re.search(r'episode_(\d+)\.pkl', fpath).group(1))
+
+        with open(fpath, 'rb') as f:
+            ep_df = pickle.load(f)
+
+        # Subset to TFs and targets of interest (assumes MultiIndex: level 0 = TF, level 1 = target)
+        mask = (
+            ep_df.index.get_level_values(0).isin(tfs_of_interest) &
+            ep_df.index.get_level_values(1).isin(targets_of_interest)
+        )
+        subset = ep_df.loc[mask, value_col]   # pd.Series with (tf, target) MultiIndex
+
+        episode_series[ep_idx] = subset
+
+    # ------------------------------------------------------------------ #
+    # 3. Concatenate into a wide DataFrame, fill missing edges with 0     #
+    # ------------------------------------------------------------------ #
+    result = (
+        pd.DataFrame(episode_series)   # rows = edges, cols = episode indices
+          .fillna(0)
+          .sort_index(axis=1)          # ensure episode columns are ordered
+    )
+
+    result.index.names = ['TF', 'target']
+    result.columns.name = 'episode'
+
+    return result

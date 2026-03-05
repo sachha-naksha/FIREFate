@@ -17,7 +17,7 @@ source activate dictys
 
 # I/O file names
 dictys_dynamic_object_path="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/output/dynamic.h5"
-output_folder="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/output/episodic_grns"
+output_folder="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/output/episodic_grns/60_percentile"
 
 # Calculate the window number based on the array task ID
 episode_idx=$((SLURM_ARRAY_TASK_ID))
@@ -28,7 +28,7 @@ traj_end=3
 num_points=40
 dist=0.001
 sparsity=0.01
-percentile=84
+percentile=60
 
 # Run episodic construction
 echo "Running episodic construction for episode ${episode_idx}" 
