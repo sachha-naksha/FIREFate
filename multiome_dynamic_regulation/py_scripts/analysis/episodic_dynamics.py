@@ -912,12 +912,12 @@ def run_episodic_construction(
     epi.build_episode_grn(time_slice=slice(time_slice_start, time_slice_end))
     epi.filter_edges()
     epi.compute_tf_expression()
-    epi.calculate_forces()
+    avg_force = epi.calculate_forces()
     episodic_grn_edges = epi.select_top_edges(percentile)
-    # save to pickle
-    out_path = os.path.join(output_folder, f'episode_{episode_idx}.pkl')
-    with open(out_path, 'wb') as f:
-        pickle.dump(episodic_grn_edges, f)
+    # save to parquet
+    out_path = os.path.join(output_folder, f'episode_{episode_idx}.parquet')
+    episodic_grn_edges.to_parquet(out_path)
+    avg_force.to_parquet(os.path.join(output_folder, f'avg_force_episode_{episode_idx}.parquet'))
     return out_path
 
 def get_episodic_grn_subset(

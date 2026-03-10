@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name="epi_grn_GC_loose_threshold"
-#SBATCH --output="epi_grn_GC_loose_threshold.log"  
+#SBATCH --job-name="epi_grn_rbpj_ntc"
+#SBATCH --output="epi_grn_rbpj_ntc.log"  
 #SBATCH -p RM-shared           
 #SBATCH -N 1            
 #SBATCH --ntasks-per-node=64 #for memory
 #SBATCH -t 00:30:00 
-#SBATCH --array=1-8
+#SBATCH --array=1-6
 
 # Set working directory where the python script is located
 WORK_DIR="/ocean/projects/cis240075p/asachan/methods/FIREFate/multiome_dynamic_regulation/py_scripts/analysis"
@@ -16,19 +16,30 @@ module load anaconda3/2022.10
 source activate dictys
 
 # I/O file names
-dictys_dynamic_object_path="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/output/dynamic.h5"
-output_folder="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/output/episodic_grns/60_percentile"
+#dictys_dynamic_object_path="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/output/dynamic.h5"
+dictys_dynamic_object_path="/ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/output/dynamic.h5"
+output_folder="/ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc/output/episodic_grns"
 
 # Calculate the window number based on the array task ID
+# episode_idx=$((SLURM_ARRAY_TASK_ID))
+# time_slice_start=$(( (episode_idx - 1) * 5 )) # N windows per episode
+# time_slice_end=$(( episode_idx * 5 ))
+# traj_start=1
+# traj_end=3
+# num_points=40
+# dist=0.001
+# sparsity=0.01
+# percentile=60
+
 episode_idx=$((SLURM_ARRAY_TASK_ID))
-time_slice_start=$(( (episode_idx - 1) * 5 )) # N windows per episode
-time_slice_end=$(( episode_idx * 5 ))
-traj_start=1
-traj_end=3
-num_points=40
+time_slice_start=$(( (episode_idx - 1) * 4 )) # N windows per episode
+time_slice_end=$(( episode_idx * 4 ))
+traj_start=0
+traj_end=1
+num_points=24
 dist=0.001
 sparsity=0.01
-percentile=60
+percentile=98
 
 # Run episodic construction
 echo "Running episodic construction for episode ${episode_idx}" 
