@@ -587,7 +587,7 @@ class SmoothedCurvesChromatin:
         if not self.series_pb:
             raise ValueError("No processed data found. Call process_dynamics() first.")
 
-        # Determine truncation mask
+        # Determine truncation mask; as both branches are not same length, truncate the longer one
         mask_pb = np.ones(len(self.pb_pseudotime), dtype=bool)
         max_gc_time = np.nanmax(self.gc_pseudotime)
         
