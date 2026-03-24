@@ -530,7 +530,7 @@ class SmoothedCurvesChromatin:
         self.pb_pseudotime = self.window_pseudotimes[self.pb_indices]
         self.gc_pseudotime = self.window_pseudotimes[self.gc_indices]
 
-    def process_dynamics(self, metric: str = 'score', smooth_sigma: float = 2.0):
+    def process_dynamics(self, metric: str = 'score', smooth_sigma: float = 2.0, relative: bool = False):
         """
         Process raw data into ordered, smoothed trajectories for PB and GC.
         
@@ -540,6 +540,10 @@ class SmoothedCurvesChromatin:
             Which data source to process.
         smooth_sigma : float
             Sigma for Gaussian smoothing.
+        relative : bool
+            If True, min-max normalize each TF's series to [0, 1] using the
+            global min/max across both trajectories combined, so both lines
+            share the same reference scale.
         """
         if self.pb_indices is None or self.gc_indices is None:
             raise ValueError("Trajectories not set. Call set_trajectory_info() first.")
@@ -550,17 +554,28 @@ class SmoothedCurvesChromatin:
         self.series_gc = {}
 
         for tf in self.tfs:
-            # Get raw values (ensure they are floats)
             vals = [self._to_float(v) for v in source_data.get(tf, [])]
             vals_arr = np.array(vals)
 
-            # Order based on trajectory indices
             ordered_pb = vals_arr[self.pb_indices]
             ordered_gc = vals_arr[self.gc_indices]
 
-            # Smooth
-            self.series_pb[tf] = self._smooth(ordered_pb, sigma=smooth_sigma)
-            self.series_gc[tf] = self._smooth(ordered_gc, sigma=smooth_sigma)
+            smoothed_pb = self._smooth(ordered_pb, sigma=smooth_sigma)
+            smoothed_gc = self._smooth(ordered_gc, sigma=smooth_sigma)
+
+            if relative:
+                # Compute global min/max across both branches so they share the
+                # same reference frame
+                global_min = np.nanmin(np.concatenate([smoothed_pb, smoothed_gc]))
+                global_max = np.nanmax(np.concatenate([smoothed_pb, smoothed_gc]))
+                denom = global_max - global_min
+                if denom == 0:
+                    denom = 1.0  # avoid division by zero for flat signals
+                smoothed_pb = (smoothed_pb - global_min) / denom
+                smoothed_gc = (smoothed_gc - global_min) / denom
+
+            self.series_pb[tf] = smoothed_pb
+            self.series_gc[tf] = smoothed_gc
 
     # ------------------------------------------------------------------
     # Visualization Methods
