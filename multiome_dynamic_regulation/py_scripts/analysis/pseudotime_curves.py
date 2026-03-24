@@ -12,6 +12,7 @@ import dictys
 import matplotlib
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import numpy as np
 import pandas as pd
 from dictys.net import stat
@@ -667,3 +668,117 @@ class SmoothedCurvesChromatin:
         )
 
         return fig
+
+    def plot_score_vs_count_comparison(self,
+        categories: Dict[str, Dict[str, str]],
+        smooth_sigma: float = 2.0,
+        subplot_cols: int = 3,
+        title: str = None,
+        ) -> go.Figure:
+
+        if not self.raw_scores or not self.raw_counts:
+            raise ValueError("No raw data found. Call extract_data() first.")
+        if self.gc_indices is None:
+            raise ValueError("Trajectories not set. Call set_trajectory_info() first.")
+
+        tf_color_map = {tf: color for cat in categories.values() for tf, color in cat.items()}
+        tf_list = list(tf_color_map.keys())
+
+        n_cols = subplot_cols
+        n_rows = math.ceil(len(tf_list) / n_cols)
+
+        fig = make_subplots(
+            rows=n_rows, cols=n_cols,
+            subplot_titles=tf_list,
+            shared_xaxes=False,
+            vertical_spacing=0.12,
+            horizontal_spacing=0.08,
+        )
+
+        x_gc = self.gc_pseudotime
+
+        def minmax(arr):
+            lo, hi = np.nanmin(arr), np.nanmax(arr)
+            denom = hi - lo if (hi - lo) != 0 else 1.0
+            return (arr - lo) / denom
+
+        for idx, tf in enumerate(tf_list):
+            row = idx // n_cols + 1
+            col = idx % n_cols + 1
+            color = tf_color_map[tf]
+
+            score_vals = np.array([self._to_float(v) for v in self.raw_scores.get(tf, [])])
+            count_vals = np.array([self._to_float(v) for v in self.raw_counts.get(tf, [])])
+
+            gc_score = self._smooth(score_vals[self.gc_indices], sigma=smooth_sigma)
+            gc_count = self._smooth(count_vals[self.gc_indices], sigma=smooth_sigma)
+
+            norm_score = minmax(gc_score)
+            norm_count = minmax(gc_count)
+
+            show_legend = idx == 0
+
+            fig.add_trace(go.Scatter(
+                x=x_gc, y=norm_score, mode="lines",
+                name="TF Binding Score",
+                line=dict(color=color, width=2.5, dash="solid"),
+                legendgroup="score", showlegend=show_legend,
+            ), row=row, col=col)
+
+            fig.add_trace(go.Scatter(
+                x=x_gc, y=norm_count, mode="lines",
+                name="OCR Count",
+                line=dict(color="grey", width=2, dash="dash"),
+                legendgroup="count", showlegend=show_legend,
+            ), row=row, col=col)
+
+            fig.add_trace(go.Scatter(
+                x=np.concatenate([x_gc, x_gc[::-1]]),
+                y=np.concatenate([
+                    np.where(norm_count > norm_score, norm_count, norm_score),
+                    np.where(norm_count > norm_score, norm_score, norm_score)[::-1],
+                ]),
+                fill="toself", fillcolor="rgba(180,180,180,0.18)",
+                line=dict(width=0),
+                name="Count > Score region",
+                legendgroup="shade", showlegend=show_legend,
+                hoverinfo="skip",
+            ), row=row, col=col)
+
+        fig.update_layout(
+            title=dict(text=title, x=0.5, font=dict(size=15)),
+            height=320 * n_rows,
+            width=420 * n_cols,
+            template="none",
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            font=dict(family="Arial, sans-serif", size=11),
+            legend=dict(
+                orientation="h", x=0.5, xanchor="center", y=-0.05,
+                title_text="<b>— Binding Score &nbsp;&nbsp; -- OCR Count</b>",
+            ),
+        )
+
+        # Global wipe first — must come before per-subplot calls
+        fig.update_xaxes(showgrid=False, zeroline=False)
+        fig.update_yaxes(showgrid=False, zeroline=False)
+
+        for i in range(1, n_rows * n_cols + 1):
+            r, c = (i - 1) // n_cols + 1, (i - 1) % n_cols + 1
+            fig.update_xaxes(
+                title_text="Pseudotime" if i > (n_rows - 1) * n_cols else "",
+                showline=True, linecolor="black", linewidth=1.5, mirror=False,
+                zeroline=False,
+                row=r, col=c,
+            )
+            fig.update_yaxes(
+                title_text="Relative value [0–1]" if (i - 1) % n_cols == 0 else "",
+                range=[-0.05, 1.1],
+                showline=True, linecolor="black", linewidth=1.5, mirror=False,
+                zeroline=False,
+                row=r, col=c,
+            )
+
+        return fig
+        
+    
