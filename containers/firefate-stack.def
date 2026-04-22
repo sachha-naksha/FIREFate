@@ -1,0 +1,197 @@
+# firefate-stack.def — one image, isolated conda envs (Python GRN + R SLIDE)
+#
+# Why Apptainer (not one flat conda env):
+#   - CellOracle, Palantir, dictys, and scanpy pull overlapping but not identical pins.
+#   - SLIDE / STREAM are R-native; mixing their Bioconductor stacks with Python GRN
+#     tools in ONE env often fails or produces subtle ABI pain.
+#   - Two (or three) micromamba envs inside the *same* SIF gives you one file to
+#     `apptainer exec` on HPC, no dependency roulette on the login node.
+#
+# Pattern:
+#   apptainer build firefate-stack.sif firefate-stack.def
+#   # %runscript is invoked with `apptainer run` (not `exec … py` — `py` is not a binary on PATH):
+#   apptainer run --bind /path/to/data:/data firefate-stack.sif py python -c "import firefate"
+#   # Or call micromamba directly:
+#   apptainer exec --bind ... firefate-stack.sif micromamba run -n firefate-py python -c "import firefate"
+#   apptainer run --bind ... firefate-stack.sif r Rscript /work/run_slide.R
+#   apptainer run ... firefate-stack.sif run-env multivelo python -c "import palantir"
+#
+# Baked-in envs (from host ~/.conda; names: multivelo, dictys, celloracle_env, env_stream)
+#   1) On the login/build node, export each env to a single directory, e.g. $SCRATCH/firefate-conda-specs:
+#        prefix defaults to ~/.conda/envs; use e.g. -p /projects/bgdb/asachan/.conda/envs/<name> if needed.
+#        mamba=$CONDA_PREFIX/bin/mamba
+#        out=$SCRATCH/firefate-conda-specs && mkdir -p "$out"
+#        for n in multivelo dictys celloracle_env env_stream; do
+#          $mamba list -p "$HOME/.conda/envs/$n" --explicit > "$out/${n}-explicit.txt"
+#          conda env export -p "$HOME/.conda/envs/$n" > "$out/${n}-export.yml"
+#        done
+#   2) Build with that directory bound to /opt/conda-specs (read-only is fine):
+#        apptainer build -B $SCRATCH/firefate-conda-specs:/opt/conda-specs:ro \
+#          firefate-stack.sif containers/firefate-stack.def
+#   %post prefers full ${name}-export.yml (includes pip); falls back to ${name}-explicit.txt.
+#   If a yml has extra channels (nvidia, pytorch, …) and the build fails, trim channels in the
+#   exported yml or add matching `micromamba config append` lines below before env create.
+#
+# If a step truly needs R→Python in one process, prefer file exchange (RDS/csv ↔ h5ad)
+# or a tiny Python subprocess from R with `micromamba run -n firefate-py python ...`.
+#
+Bootstrap: docker
+From: mambaorg/micromamba:1.5.10
+
+%labels
+    Maintainer FIREFate
+    Description Multi-env SIF: multivelo, dictys, celloracle_env, env_stream + firefate-py, firefate-r
+
+%arguments
+    # Optional: apptainer build --build-arg MAMBA_DOCKERFILE_ONLY=1 ...
+
+# Optional: copy exported yml/txt into the build context, then uncomment so build works
+# without -B. Paths are relative to the CWD from which you run apptainer build.
+#%files
+#    conda-specs /opt/conda-specs
+
+%post
+    set -euo pipefail
+    # mambaorg image: micromamba in PATH, default user may be mambauser — build runs as root in many sites
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get update && apt-get install -y --no-install-recommends \
+            ca-certificates git build-essential \
+            libhdf5-dev libxml2-dev libcurl4-openssl-dev libssl-dev libfontconfig1-dev \
+            libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev \
+            && rm -rf /var/lib/apt/lists/*
+    fi
+
+    # --- Baked-in conda envs (multivelo, dictys, celloracle_env, env_stream) ---
+    # Build must bind a directory to /opt/conda-specs (see header). Prefer *-export.yml
+    # (has pip: sections); else *-explicit.txt. Strip `prefix:` so env create is relocatable.
+    SPEC_DIR="/opt/conda-specs"
+    for name in multivelo dictys celloracle_env env_stream; do
+        yml="$SPEC_DIR/${name}-export.yml"
+        exp="$SPEC_DIR/${name}-explicit.txt"
+        if [ -f "$yml" ]; then
+            sed '/^prefix:/d' "$yml" > "/tmp/${name}.yml"
+            micromamba env create -y -f "/tmp/${name}.yml"
+        elif [ -f "$exp" ]; then
+            micromamba create -y -n "$name" -f "$exp"
+        else
+            echo "firefate-stack.def: missing $yml or $exp" >&2
+            echo "Build with: apptainer build -B /path/to/specs:/opt/conda-specs:ro ..." >&2
+            exit 1
+        fi
+    done
+    micromamba clean -a -y
+
+    # --- Python / Jupyter / GRN stack (adjust pins to your validated versions) ---
+    micromamba create -y -n firefate-py -c conda-forge \
+        python=3.10 \
+        pip \
+        numpy scipy pandas matplotlib \
+        scanpy anndata \
+        networkx tqdm joblib scikit-learn \
+        h5py \
+        && micromamba clean -a -y
+
+    # Install packages that rarely resolve cleanly from conda alone:
+    micromamba run -n firefate-py python -m pip install --no-cache-dir \
+        palantir \
+        celloracle \
+        || true
+
+    # dictys / loveslide: replace with your pins (PyPI, git+https, or local wheel)
+    # micromamba run -n firefate-py python -m pip install --no-cache-dir dictys
+    # micromamba run -n firefate-py python -m pip install --no-cache-dir git+https://github.com/.../loveslide.git
+
+    # Editable FIREFate from bind-mounted host (recommended) OR bake a tag in %post:
+    # micromamba run -n firefate-py python -m pip install --no-cache-dir /opt/src/FIREFate
+
+    # --- R stack (SLIDE, STREAM, ggplot2, etc.) ---
+    micromamba create -y -n firefate-r -c conda-forge \
+        r-base=4.3 \
+        r-essentials \
+        r-devtools \
+        r-remotes \
+        bioconductor-biocmanager \
+        && micromamba clean -a -y
+
+    # Example: SLIDE from GitHub (replace URL/branch with Akanksha’s fork if needed)
+    # micromamba run -n firefate-r Rscript -e "BiocManager::install(c('...')); remotes::install_github('alw399/SLIDE', ref='...')"
+
+    # STREAM (R package — confirm you mean this STREAM vs another tool named similarly):
+    # micromamba run -n firefate-r Rscript -e "BiocManager::install('STREAM')"
+
+    mkdir -p /work /data
+    chmod 777 /work /data
+
+%environment
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    # Image-internal default; override at runtime with --env or %environment additions
+    export MAMBA_ROOT_PREFIX=/opt/conda
+    export PATH=/opt/conda/bin:$PATH
+
+%runscript
+    # Usage:  firefate-stack.sif py  <args…>   → micromamba run -n firefate-py …
+    #         firefate-stack.sif r   <args…>   → micromamba run -n firefate-r …
+    #         firefate-stack.sif run-env multivelo python -c "import palantir"
+    set -euo pipefail
+    case "${1:-}" in
+        py)
+            shift
+            exec micromamba run -n firefate-py "$@"
+            ;;
+        r)
+            shift
+            exec micromamba run -n firefate-r "$@"
+            ;;
+        run-env)
+            shift
+            n="${1:-}"
+            if [ -z "$n" ]; then
+                echo "Usage: $0 run-env <env_name> <command…>" >&2
+                echo "  e.g. $0 run-env celloracle_env python -c \"import celloracle\"" >&2
+                exit 1
+            fi
+            shift
+            exec micromamba run -n "$n" "$@"
+            ;;
+        shell-py)
+            exec micromamba run -n firefate-py /bin/bash
+            ;;
+        shell-r)
+            exec micromamba run -n firefate-r /bin/bash
+            ;;
+        *)
+            echo "Usage: $0 {py|r|run-env|shell-py|shell-r} <command…>" >&2
+            echo "  py …                    firefate-py" >&2
+            echo "  r …                      firefate-r" >&2
+            echo "  run-env multivelo …      Palantir / multivelo" >&2
+            echo "  run-env dictys …" >&2
+            echo "  run-env celloracle_env …" >&2
+            echo "  run-env env_stream …" >&2
+            exit 1
+            ;;
+    esac
+
+%help
+    Micromamba env names in this SIF (after baking from /opt/conda-specs at build):
+      multivelo, dictys, celloracle_env, env_stream
+      firefate-py : minimal scanpy + palantir/celloracle (optional baseline)
+      firefate-r   : R / Bioconductor helpers
+
+    Build (requires exporting the four host envs and binding them into the build):
+      1) mkdir -p $SCRATCH/fcs && for n in multivelo dictys celloracle_env env_stream; do
+           conda env export -p $HOME/.conda/envs/$n > $SCRATCH/fcs/${n}-export.yml; done
+      2) apptainer build -B $SCRATCH/fcs:/opt/conda-specs:ro firefate-stack.sif containers/firefate-stack.def
+
+    Run (bind repo + data; use the env that matches your step):
+      apptainer run --nv --bind "$PWD:/src/FIREFate" --bind "/path/data:/data" \
+        firefate-stack.sif run-env multivelo python -m pip install -e /src/FIREFate
+      apptainer run ... firefate-stack.sif run-env celloracle_env python script.py
+      apptainer exec ... firefate-stack.sif micromamba run -n env_stream Rscript /work/trajectory.R
+      apptainer run --bind ... firefate-stack.sif r Rscript /src/FIREFate/pipelines/run_slide.R
+
+    Why not one conda env?
+      Palantir, CellOracle, dictys, STREAM, and R Bioconductor have overlapping but conflicting pins.
+
+    Optional GPU (dictys / CellOracle / torch):
+      apptainer exec --nv … firefate-stack.sif micromamba run -n dictys python …
