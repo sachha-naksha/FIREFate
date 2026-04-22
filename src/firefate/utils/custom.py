@@ -385,36 +385,43 @@ def cluster_heatmap(
     inverty=True,
 ):
     """
-    Draw 2-D hierachical clustering of pandas.DataFrame, with optional hierachical clustering on both axes.
-    X/Y axis of figure corresponds to columns/rows of the dataframe.
-    d:		Pandas.DataFrame 2D data with index & column names for clustering.
-    optimal_ordering: passed to scipy.cluster.hierarchy.dendrogram
-    method: Method of hierarchical clustering, passed to scipy.cluster.hierarchy.linkage.
-                    Accepts single strs or a tuple of two strings for different method options for x and y.
-    metric:	Metric to compute pariwise distance for clustering, passed to scipy.spatial.distance.pdist.
-                    Accepts single strs or a tuple of two strings for different metric options for x and y.
-    dshow:	Pandas.DataFrame 2D data with index & column names to draw heatmap. Defaults to d.
-    fig:	Figure to plot on.
-    cmap:	Colormap
-    aspect:	Aspect ratio
-    figscale:	Scale of figure compared to font.
-    dtop,
-    dright:	Top and right dendrogram size. Value from 0 to 1 values as proportion.
-                    If 0, do not cluster on given axis.
-    wcolorbar: Width of colorbar. Value from 0 to 1 values as proportion.
-    wedge:	Width of edges and between colorbar and main figure.
-                    Value from 0 to 1 values as proportion.
-    xselect,
-    yselect:np.array(bool) of coordinates to draw. Current only selected coordinates are used for clustering.
-    xtick,
-    ytick:	Whether to show ticks.
-    vmin,
-    vmax:	Minimum/maximum values of heatmap.
-    inverty:Whether to invert direction of y.
-    Return:
-    figure:	plt.Figure drawn on
-    x:		column IDs included
-    y:		index IDs included.
+    Draw a 2D hierarchically clustered heatmap from a DataFrame.
+
+    The figure X/Y axes correspond to DataFrame columns/rows.
+
+    Parameters
+    ----------
+    d : pandas.DataFrame
+        2D data with index and column names used for clustering.
+    optimal_ordering : bool
+        Passed to ``scipy.cluster.hierarchy.dendrogram``.
+    method : str or tuple of str
+        Linkage method(s) for ``scipy.cluster.hierarchy.linkage``.
+    metric : str or tuple of str
+        Distance metric(s) for ``scipy.spatial.distance.pdist``.
+    dshow : pandas.DataFrame, optional
+        Data to render; defaults to ``d``.
+    fig : matplotlib.figure.Figure, optional
+        Figure to draw on.
+    cmap : str
+        Colormap name.
+    aspect, figscale, dtop, dright, wcolorbar, wedge : float
+        Layout and colorbar geometry (fractions of the figure).
+    xselect, yselect : array-like of bool, optional
+        Mask of rows/columns to include in clustering and display.
+    xtick, ytick : bool
+        Whether to show axis ticks.
+    vmin, vmax : float, optional
+        Color scale limits.
+    inverty : bool
+        Whether to invert the y-axis.
+
+    Returns
+    -------
+    figure : matplotlib.figure.Figure
+        Figure with dendrograms and heatmap.
+    x, y : list
+        Column and index labels included after clustering/selection.
     """
     import matplotlib.pyplot as plt
     import numpy as np

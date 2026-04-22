@@ -354,21 +354,21 @@ class EpisodeDynamics:
 
 def calculate_tf_episodic_enrichment(df, total_lf_genes, total_genes_in_grn):
     """
-    Calculate TF enrichment scores using hypergeometric test
+    Calculate TF enrichment scores using a hypergeometric test.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     df : pandas.DataFrame
-        DataFrame with MultiIndex (TF, Target) and columns 'avg_force', 'is_in_lf'
+        DataFrame with MultiIndex (TF, Target) and columns ``avg_force``, ``is_in_lf``.
     total_lf_genes : int
-        Total number of active LF genes in the episode
+        Total number of active LF genes in the episode.
     total_genes_in_grn : int
-        Total number of genes in the episodic GRN
+        Total number of genes in the episodic GRN.
 
-    Returns:
-    --------
+    Returns
+    -------
     pandas.DataFrame
-        DataFrame with columns: TF, p_value, enrichment_score, genes_in_lf, genes_dwnstrm, weights
+        Columns include TF, p_value, enrichment_score, genes_in_lf, genes_dwnstrm, weights.
     """
 
     results = []
@@ -927,23 +927,27 @@ def get_episodic_grn_subset(
     value_col: str = 'avg_force'
 ) -> pd.DataFrame:
     """
-    Loop over all episode pkl files in output_folder, subset edges to the
-    TFs and targets of interest, and return a wide DataFrame where:
-      - rows    = (tf, target) edge multi-index
-      - columns = episode index (0, 1, 2, ...)
-      - values  = avg_force for that edge in that episode, or 0 if absent
+    Loop over all episode pickle files in ``output_folder``, subset edges to the
+    TFs and targets of interest, and return a wide DataFrame.
+
+    Rows are ``(tf, target)`` edges; columns are episode indices; values come from
+    ``value_col`` (e.g. ``avg_force``), or zero if the edge is absent in that episode.
 
     Parameters
     ----------
-    output_folder       : directory containing episode_0.pkl, episode_1.pkl, ...
-    tfs_of_interest     : list of TF names to keep
-    targets_of_interest : list of target gene names to keep
-    value_col           : column in each episode df holding the edge weight
-                          (default: 'avg_force')
+    output_folder : str
+        Directory containing ``episode_0.pkl``, ``episode_1.pkl``, etc.
+    tfs_of_interest : list
+        TF names to keep.
+    targets_of_interest : list
+        Target gene names to keep.
+    value_col : str, optional
+        Column in each episode dataframe holding the edge weight. Default ``avg_force``.
 
     Returns
     -------
-    pd.DataFrame  shape = (n_edges, n_episodes)
+    pandas.DataFrame
+        Shape ``(n_edges, n_episodes)``.
     """
     # ------------------------------------------------------------------ #
     # 1. Discover all episode pkl files, sorted by episode index           #

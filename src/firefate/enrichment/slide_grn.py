@@ -66,7 +66,7 @@ def get_slide_grn_enrichment(
     """Enumerate TF combinations and strength conditions; fill ``cc_dict`` (in-place).
 
     ``edges_df`` columns must include ``source``, ``target``, ``strength`` (0/1),
-    and ``weight`` (used to dedupe by max |weight| per source–target).
+    and ``weight`` (used to dedupe by max absolute ``weight`` per source–target).
 
     The nested list structure matches the TA muscle pipeline for backward compatibility
     with :func:`build_enrichment_table` / pickling.

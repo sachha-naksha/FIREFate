@@ -54,9 +54,13 @@ class SmoothedCurvesGRN:
         self, mode=None
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
-        compute expression (lcpm) and regulation (ltarget_count) curves over pseudotime for one branch.            
-        returns:
-            tuple of (curves_dataframe, pseudotime_series)
+        Compute expression (lcpm) and regulation (ltarget_count) curves over pseudotime
+        for one branch.
+
+        Returns
+        -------
+        tuple of (pandas.DataFrame, pandas.Series)
+            ``(curves_dataframe, pseudotime_series)``.
         """
 
         # sample equispaced points and instantiate smoothing function    
@@ -272,17 +276,22 @@ class SmoothedCurvesGRN:
         include_metrics: list = None
     ) -> pd.DataFrame:
         """
-        compute multiple characteristics for the given curves.
-        
-        args:
-            dx: Pseudotime values
-            dy: Expression/regulation values  
-            include_metrics: List of metrics to compute. Options: 
-                           ['transient_logfc', 'switching_time', 'terminal_logfc', 'auc']
-                           if None, computes all metrics.
-                           
-        returns:
-            dataframe with computed characteristics for each curve
+        Compute multiple characteristics for the given curves.
+
+        Parameters
+        ----------
+        dx : ndarray
+            Pseudotime values.
+        dy : ndarray
+            Expression or regulation values.
+        include_metrics : list, optional
+            Metrics to compute. Options: ``transient_logfc``, ``switching_time``,
+            ``terminal_logfc``, ``auc``. If None, computes all metrics.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One column per requested metric for each curve.
         """
         if include_metrics is None:
             include_metrics = ['transient_logfc', 'switching_time', 'terminal_logfc', 'auc']

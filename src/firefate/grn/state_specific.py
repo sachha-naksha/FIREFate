@@ -39,7 +39,8 @@ def combine_cluster_grn_links(
     cluster_fusion
         Clusters whose edges are merged (order preserved).
     quantile
-        Quantile of |coef_abs| used as cutoff; edges at or above are ``strength == 1``.
+        Quantile of the ``coef_abs`` column used as cutoff; edges at or above are
+        ``strength == 1``.
     histogram_path
         If set, save coefficient histogram with cutoff line.
     """
