@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FIREFate: Sphinx live (autobuild)",
+      "type": "shell",
+      "command": "sphinx-autobuild . _build/livehtml --host 127.0.0.1 --port 8000 --watch ../src",
+      "options": {
+        "cwd": "${workspaceFolder}/docs"
+      },
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "sphinx-autobuild",
+        "pattern": { "regexp": "^(.*)$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Running Sphinx|Starting initial build",
+          "endsPattern": "Waiting to detect changes"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "firefate-docs"
+      }
+    }
+  ]
+}

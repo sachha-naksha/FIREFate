@@ -21,6 +21,12 @@ This site hosts the user guide and Python API reference for the ``firefate`` pac
 
       The seven scientific capabilities that define the public surface of FIREFate.
 
+   .. grid-item-card:: Methods
+      :link: methods
+      :link-type: doc
+
+      Formal description of the FIREFate methods (from LaTeX or manuscript notes).
+
    .. grid-item-card:: API reference
       :link: reference
       :link-type: doc
@@ -40,6 +46,7 @@ This site hosts the user guide and Python API reference for the ``firefate`` pac
 
    installation
    capabilities
+   methods
 
 .. toctree::
    :maxdepth: 2
