@@ -80,6 +80,11 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Pickle / serialized Python dumps (do not commit)
+*.pkl
+*.pickle
+*.joblib
+
 # IPython
 profile_default/
 ipython_config.py
