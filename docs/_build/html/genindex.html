@@ -1,0 +1,800 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="#"><link rel="search" title="Search" href="search.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 --><title>Index - FIREFate 0.1.0</title>
+<link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-design.min.css?v=95c83b7e" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">FIREFate 0.1.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">FIREFate 0.1.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">User guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="capabilities.html">Seven capabilities</a></li>
+<li class="toctree-l1"><a class="reference internal" href="methods.html">Methods</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Reference</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="reference.html">API reference</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          
+<section class="genindex-section">
+  <h1 id="index">Index</h1>
+  <div class="genindex-jumpbox"><a href="#A"><strong>A</strong></a> | <a href="#B"><strong>B</strong></a> | <a href="#C"><strong>C</strong></a> | <a href="#E"><strong>E</strong></a> | <a href="#F"><strong>F</strong></a> | <a href="#G"><strong>G</strong></a> | <a href="#H"><strong>H</strong></a> | <a href="#L"><strong>L</strong></a> | <a href="#M"><strong>M</strong></a> | <a href="#P"><strong>P</strong></a> | <a href="#R"><strong>R</strong></a> | <a href="#S"><strong>S</strong></a> | <a href="#W"><strong>W</strong></a></div>
+</section>
+<section id="A" class="genindex-section">
+  <h2>A</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.AlignTimeScales">AlignTimeScales (class in firefate)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.episodic_dynamics.AlignTimeScales">(class in firefate.core.episodic_dynamics)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.annotate_lf_in_grn">annotate_lf_in_grn() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.annotate_lf_in_grn">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="B" class="genindex-section">
+  <h2>B</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.EnrichmentManager.batch_from_config">batch_from_config() (firefate.EnrichmentManager static method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.managers.enrichment_manager.EnrichmentManager.batch_from_config">(firefate.managers.enrichment_manager.EnrichmentManager static method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.grn.state_specific.StateSpecificEnrichment.build_cluster_fusions">build_cluster_fusions() (firefate.grn.state_specific.StateSpecificEnrichment method)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.enrichment.slide_grn.build_enrichment_table">build_enrichment_table() (in module firefate.enrichment.slide_grn)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.build_episode_grn">build_episode_grn() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.build_episode_grn">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="C" class="genindex-section">
+  <h2>C</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.calculate_auc">calculate_auc() (firefate.core.pseudotime_curves.SmoothedCurvesGRN static method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.calculate_auc">(firefate.SmoothedCurvesGRN static method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.calculate_enrichment">calculate_enrichment() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.calculate_enrichment">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.calculate_force_curves">calculate_force_curves() (firefate.core.pseudotime_curves.SmoothedCurvesGRN static method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.calculate_force_curves">(firefate.SmoothedCurvesGRN static method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.calculate_force_curves_chunk">calculate_force_curves_chunk() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.calculate_force_curves_parallel">calculate_force_curves_parallel() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.calculate_forces">calculate_forces() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.calculate_forces">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.calculate_switching_time">calculate_switching_time() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.calculate_switching_time">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.calculate_terminal_logfc">calculate_terminal_logfc() (firefate.core.pseudotime_curves.SmoothedCurvesGRN static method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.calculate_terminal_logfc">(firefate.SmoothedCurvesGRN static method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.calculate_tf_episodic_enrichment">calculate_tf_episodic_enrichment() (in module firefate)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.episodic_dynamics.calculate_tf_episodic_enrichment">(in module firefate.core.episodic_dynamics)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.calculate_transient_logfc">calculate_transient_logfc() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.calculate_transient_logfc">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.utils.custom.check_if_gene_in_ndict">check_if_gene_in_ndict() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.classify_tf_global_activity">classify_tf_global_activity() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.classify_tf_global_activity">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.utils.custom.cluster_heatmap">cluster_heatmap() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.grn.state_specific.combine_cluster_grn_links">combine_cluster_grn_links() (in module firefate.grn.state_specific)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.compute_expression_curves">compute_expression_curves() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.compute_expression_curves">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.compute_tf_expression">compute_tf_expression() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.compute_tf_expression">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.create_balanced_chunks">create_balanced_chunks() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.create_enriched_links_per_state">create_enriched_links_per_state() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.create_pathway_color_scheme">create_pathway_color_scheme() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.curvature_of_expression">curvature_of_expression() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.curve_characteristics">curve_characteristics() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.curve_characteristics">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="E" class="genindex-section">
+  <h2>E</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.EnrichmentManager.enrich_all_episodes">enrich_all_episodes() (firefate.EnrichmentManager method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.managers.enrichment_manager.EnrichmentManager.enrich_all_episodes">(firefate.managers.enrichment_manager.EnrichmentManager method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.EnrichmentManager.enrich_episodic">enrich_episodic() (firefate.EnrichmentManager method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.managers.enrichment_manager.EnrichmentManager.enrich_episodic">(firefate.managers.enrichment_manager.EnrichmentManager method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.EnrichmentManager.enrich_state_specific">enrich_state_specific() (firefate.EnrichmentManager method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.managers.enrichment_manager.EnrichmentManager.enrich_state_specific">(firefate.managers.enrichment_manager.EnrichmentManager method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.EnrichmentManager">EnrichmentManager (class in firefate)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.managers.enrichment_manager.EnrichmentManager">(class in firefate.managers.enrichment_manager)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.EpisodeDynamics">EpisodeDynamics (class in firefate)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics">(class in firefate.core.episodic_dynamics)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.episodic_composition">episodic_composition() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.episodic_composition">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesChromatin.extract_data">extract_data() (firefate.core.pseudotime_curves.SmoothedCurvesChromatin method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesChromatin.extract_data">(firefate.SmoothedCurvesChromatin method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.utils.custom.extract_tf_gene_info">extract_tf_gene_info() (in module firefate.utils.custom)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="F" class="genindex-section">
+  <h2>F</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.utils.custom.fig_expression_gradient_heatmap">fig_expression_gradient_heatmap() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.fig_expression_linear_heatmap">fig_expression_linear_heatmap() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.fig_regulation_heatmap">fig_regulation_heatmap() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.filter_chunk_of_edges">filter_chunk_of_edges() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.filter_edges">filter_edges() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.filter_edges">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.filter_edges_by_significance_and_direction">filter_edges_by_significance_and_direction() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.grn.state_specific.filter_network_scores_for_clusters">filter_network_scores_for_clusters() (in module firefate.grn.state_specific)</a>
+</li>
+        <li>
+    firefate
+
+        <ul>
+          <li><a href="reference.html#module-firefate">module</a>
+</li>
+        </ul></li>
+        <li>
+    firefate.core.episodic_dynamics
+
+        <ul>
+          <li><a href="reference.html#module-firefate.core.episodic_dynamics">module</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li>
+    firefate.core.pseudotime_curves
+
+        <ul>
+          <li><a href="reference.html#module-firefate.core.pseudotime_curves">module</a>
+</li>
+        </ul></li>
+        <li>
+    firefate.enrichment.slide_grn
+
+        <ul>
+          <li><a href="reference.html#module-firefate.enrichment.slide_grn">module</a>
+</li>
+        </ul></li>
+        <li>
+    firefate.grn.state_specific
+
+        <ul>
+          <li><a href="reference.html#module-firefate.grn.state_specific">module</a>
+</li>
+        </ul></li>
+        <li>
+    firefate.managers.enrichment_manager
+
+        <ul>
+          <li><a href="reference.html#module-firefate.managers.enrichment_manager">module</a>
+</li>
+        </ul></li>
+        <li>
+    firefate.utils.custom
+
+        <ul>
+          <li><a href="reference.html#module-firefate.utils.custom">module</a>
+</li>
+        </ul></li>
+        <li>
+    firefate.utils.plots
+
+        <ul>
+          <li><a href="reference.html#module-firefate.utils.plots">module</a>
+</li>
+        </ul></li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="G" class="genindex-section">
+  <h2>G</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.get_beta_curves">get_beta_curves() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.get_beta_curves">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.get_episodic_grn_subset">get_episodic_grn_subset() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.get_gene_indices">get_gene_indices() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.enrichment.slide_grn.get_slide_grn_enrichment">get_slide_grn_enrichment() (in module firefate.enrichment.slide_grn)</a>
+</li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.get_smoothed_curves">get_smoothed_curves() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.get_smoothed_curves">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.utils.custom.get_state_labels_in_window">get_state_labels_in_window() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.get_state_total_counts">get_state_total_counts() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.get_tf_indices">get_tf_indices() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.get_top_k_fraction_labels">get_top_k_fraction_labels() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN.get_top_k_tfs_by_class">get_top_k_tfs_by_class() (firefate.core.pseudotime_curves.SmoothedCurvesGRN method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesGRN.get_top_k_tfs_by_class">(firefate.SmoothedCurvesGRN method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.get_unique_regs_by_target">get_unique_regs_by_target() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.grn.state_specific.grn_edges_from_combined_links">grn_edges_from_combined_links() (in module firefate.grn.state_specific)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="H" class="genindex-section">
+  <h2>H</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.enrichment.slide_grn.hypergeom_slide_grn_score">hypergeom_slide_grn_score() (in module firefate.enrichment.slide_grn)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="L" class="genindex-section">
+  <h2>L</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.grn.state_specific.load_celloracle_grn_tables">load_celloracle_grn_tables() (in module firefate.grn.state_specific)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.grn.state_specific.StateSpecificEnrichment.load_grn_data">load_grn_data() (firefate.grn.state_specific.StateSpecificEnrichment method)</a>
+</li>
+        <li><a href="reference.html#firefate.grn.state_specific.StateSpecificEnrichment.load_slide_features_from_files">load_slide_features_from_files() (firefate.grn.state_specific.StateSpecificEnrichment method)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="M" class="genindex-section">
+  <h2>M</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li>
+    module
+
+        <ul>
+          <li><a href="reference.html#module-firefate">firefate</a>
+</li>
+          <li><a href="reference.html#module-firefate.core.episodic_dynamics">firefate.core.episodic_dynamics</a>
+</li>
+          <li><a href="reference.html#module-firefate.core.pseudotime_curves">firefate.core.pseudotime_curves</a>
+</li>
+          <li><a href="reference.html#module-firefate.enrichment.slide_grn">firefate.enrichment.slide_grn</a>
+</li>
+          <li><a href="reference.html#module-firefate.grn.state_specific">firefate.grn.state_specific</a>
+</li>
+          <li><a href="reference.html#module-firefate.managers.enrichment_manager">firefate.managers.enrichment_manager</a>
+</li>
+          <li><a href="reference.html#module-firefate.utils.custom">firefate.utils.custom</a>
+</li>
+          <li><a href="reference.html#module-firefate.utils.plots">firefate.utils.plots</a>
+</li>
+        </ul></li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="P" class="genindex-section">
+  <h2>P</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesChromatin.plot">plot() (firefate.core.pseudotime_curves.SmoothedCurvesChromatin method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesChromatin.plot">(firefate.SmoothedCurvesChromatin method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.utils.custom.plot_expression_for_multiple_genes">plot_expression_for_multiple_genes() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.plot_force_heatmap">plot_force_heatmap() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.plot_force_heatmap_with_clustering">plot_force_heatmap_with_clustering() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.plot_gene_expression_subplots">plot_gene_expression_subplots() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesChromatin.plot_score_vs_count_comparison">plot_score_vs_count_comparison() (firefate.core.pseudotime_curves.SmoothedCurvesChromatin method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesChromatin.plot_score_vs_count_comparison">(firefate.SmoothedCurvesChromatin method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.utils.plots.plot_tf_episodic_enrichment_dotplot">plot_tf_episodic_enrichment_dotplot() (in module firefate.utils.plots)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.custom.plot_tf_gene_coregulation_heatmap">plot_tf_gene_coregulation_heatmap() (in module firefate.utils.custom)</a>
+</li>
+        <li><a href="reference.html#firefate.utils.plots.plot_tf_target_episodic_heatmap">plot_tf_target_episodic_heatmap() (in module firefate.utils.plots)</a>
+</li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesChromatin.process_dynamics">process_dynamics() (firefate.core.pseudotime_curves.SmoothedCurvesChromatin method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesChromatin.process_dynamics">(firefate.SmoothedCurvesChromatin method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.AlignTimeScales.pseudotime_of_sampled_points">pseudotime_of_sampled_points() (firefate.AlignTimeScales method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.episodic_dynamics.AlignTimeScales.pseudotime_of_sampled_points">(firefate.core.episodic_dynamics.AlignTimeScales method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.AlignTimeScales.pseudotime_of_windows">pseudotime_of_windows() (firefate.AlignTimeScales method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.episodic_dynamics.AlignTimeScales.pseudotime_of_windows">(firefate.core.episodic_dynamics.AlignTimeScales method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="R" class="genindex-section">
+  <h2>R</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.grn.state_specific.StateSpecificEnrichment.run_enrichment">run_enrichment() (firefate.grn.state_specific.StateSpecificEnrichment method)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.run_episodic_construction">run_episodic_construction() (in module firefate.core.episodic_dynamics)</a>
+</li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.run_episodic_enrichment">run_episodic_enrichment() (in module firefate.core.episodic_dynamics)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="S" class="genindex-section">
+  <h2>S</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.select_top_activating_and_repressing_edges">select_top_activating_and_repressing_edges() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.select_top_activating_and_repressing_edges">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.select_top_edges">select_top_edges() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.select_top_edges">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.episodic_dynamics.EpisodeDynamics.set_lf_genes">set_lf_genes() (firefate.core.episodic_dynamics.EpisodeDynamics method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.EpisodeDynamics.set_lf_genes">(firefate.EpisodeDynamics method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesChromatin.set_trajectory_info">set_trajectory_info() (firefate.core.pseudotime_curves.SmoothedCurvesChromatin method)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.SmoothedCurvesChromatin.set_trajectory_info">(firefate.SmoothedCurvesChromatin method)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.SmoothedCurvesChromatin">SmoothedCurvesChromatin (class in firefate)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesChromatin">(class in firefate.core.pseudotime_curves)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.SmoothedCurvesGRN">SmoothedCurvesGRN (class in firefate)</a>
+
+        <ul>
+          <li><a href="reference.html#firefate.core.pseudotime_curves.SmoothedCurvesGRN">(class in firefate.core.pseudotime_curves)</a>
+</li>
+        </ul></li>
+        <li><a href="reference.html#firefate.utils.plots.sort_tfs_by_gene_similarity">sort_tfs_by_gene_similarity() (in module firefate.utils.plots)</a>
+</li>
+        <li><a href="reference.html#firefate.grn.state_specific.StateSpecificEnrichment">StateSpecificEnrichment (class in firefate.grn.state_specific)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+<section id="W" class="genindex-section">
+  <h2>W</h2>
+  <table style="width: 100%" class="indextable genindextable"><tr>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.utils.custom.window_labels_to_count_df">window_labels_to_count_df() (in module firefate.utils.custom)</a>
+</li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference.html#firefate.enrichment.slide_grn.write_enrichment_table">write_enrichment_table() (in module firefate.enrichment.slide_grn)</a>
+</li>
+    </ul></td>
+  </tr></table>
+</section>
+
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, Akanksha Sachan
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=01f34227"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=258bad9d"></script>
+    <script src="_static/design-tabs.js?v=f930bc37"></script>
+    </body>
+</html>
