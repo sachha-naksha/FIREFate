@@ -216,4 +216,4 @@ __marimo__/
 multiome_dynamic_regulation/py_scripts/trajectory/t_cell_imputation.ipynb
 
 # data
-moscot/joint_atac_rna_skm.h5ad
+moscot/*.h5ad
