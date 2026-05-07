@@ -216,4 +216,29 @@ __marimo__/
 multiome_dynamic_regulation/py_scripts/trajectory/t_cell_imputation.ipynb
 
 # data
-moscot/*.h5ad
+*.h5ad
+*.h5
+*.hdf5
+*.loom
+*.zarr/
+*.mtx
+*.mtx.gz
+*.npz
+*.npy
+*.parquet
+*.feather
+*.bam
+*.bai
+*.sam
+*.cram
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.vcf
+*.vcf.gz
+*.bed.gz
+*.bigwig
+*.bw
+*.tsv.gz
+*.csv.gz
