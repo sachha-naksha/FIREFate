@@ -218,6 +218,8 @@ multiome_dynamic_regulation/py_scripts/trajectory/t_cell_imputation.ipynb
 # data
 *.h5ad
 *.h5
+*.h5mu
+*.mu
 *.hdf5
 *.loom
 *.zarr/
