@@ -23,6 +23,8 @@ The module-level softmax helpers (:func:`get_max_points`,
 are the canonical implementation; :class:`TFForceWaves` reuses them.
 """
 
+from collections import Counter, defaultdict
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -704,37 +706,260 @@ class TFForceWaves:
 # ---------------------------------------------------------------------------
 
 class WaveValidation:
-    """Validate wave-clustered FireFate links against random links.
+    """Validate enriched (FireFate) links against random links, per wave.
 
-    Intended to compare a metric (e.g. force magnitude / temporal coherence)
-    between the prioritized FireFate links and random links drawn from the same
-    force DataFrame, broken out by wave on the x-axis.
+    For each wave, the enriched links assigned to it are compared against a
+    size-matched set of random links that fall in the *same* wave. Random links
+    are drawn so that neither their TF nor their target is one of the enriched
+    TFs/targets ("non-enriched" links). The comparison metric is the absolute
+    maximum TF force along the trajectory (``max_t |force(t)|``), one value per
+    link, rendered as a box plot with one group of boxes per wave.
 
-    Not yet implemented -- the validation procedure from the notebook is still
-    to be written.
+    Random links get their own forces (computed via the same GRN, without
+    mutating ``waves``) and are binned into waves with the same softmax
+    peak-pseudotime rule and switch boundaries as the enriched links.
     """
 
-    def __init__(self, force_curves, dtime, wave_assignments):
+    def __init__(self, waves, enriched_links, switch_pseudotimes,
+                 varname='w_in', top_k=5, temperature=1.0, method='weighted_mean'):
         """
         Parameters
         ----------
-        force_curves : pandas.DataFrame
-            Multi-indexed (TF, Target) force curves; the random-link pool is
-            sampled from here.
-        dtime : pandas.Series
-            Pseudotime per column of ``force_curves``.
-        wave_assignments : pandas.DataFrame
-            Output of :meth:`TFForceWaves.classify_waves` (FireFate links + wave).
+        waves : TFForceWaves
+            Fitted instance. ``waves.compute_forces(enriched_links)`` must have
+            been called so ``waves.force_curves`` / ``waves.dtime`` hold the
+            enriched-link forces; ``waves.curves`` is reused to compute random-
+            link forces.
+        enriched_links : list of (TF, Target)
+            The enriched / prioritized links (e.g. ``PB_links_plotting``).
+        switch_pseudotimes : sequence of float
+            Wave-switch boundaries (the same termination pseudotimes passed to
+            :meth:`TFForceWaves.classify_waves`). ``N`` switches -> ``N+1`` waves.
+        varname : str
+            Network variable used for random-link forces (matches the enriched
+            ``compute_forces`` call). Default ``'w_in'``.
+        top_k, temperature, method :
+            Softmax peak-pseudotime parameters (passed to the module helpers),
+            kept identical to the enriched wave assignment for a fair comparison.
         """
-        self.force_curves = force_curves
-        self.dtime = dtime
-        self.wave_assignments = wave_assignments
+        self.waves = waves
+        self.enriched_links = [tuple(l) for l in enriched_links]
+        self.switch_pseudotimes = np.sort(np.asarray(switch_pseudotimes, dtype=float))
+        self.varname = varname
+        self.softmax_kwargs = dict(top_k=top_k, temperature=temperature, method=method)
+        self.result_ = None      # tidy DataFrame after run()
 
-    def sample_random_links(self, n_per_wave, exclude=None, random_state=None):
-        raise NotImplementedError("Random-link sampling not implemented yet.")
+    # ------------------------------------------------------------------
+    # internals
+    # ------------------------------------------------------------------
 
-    def compare_by_wave(self):
-        raise NotImplementedError("Per-wave comparison not implemented yet.")
+    def _abs_max_force(self, force_curves, links):
+        """``max_t |force(t)|`` per link as a dict {(TF, Target): float}."""
+        return {link: float(force_curves.loc[link].abs().max()) for link in links}
 
-    def plot(self):
-        raise NotImplementedError("Validation plot (split by wave) not implemented yet.")
+    def _assign_waves(self, force_curves, dtime):
+        """Bin every link in ``force_curves`` to a wave (same rule as classify_waves)."""
+        reg_pt = aggregate_max_points(
+            get_max_points(force_curves, dtime,
+                           top_k=self.softmax_kwargs['top_k'],
+                           temperature=self.softmax_kwargs['temperature']),
+            method=self.softmax_kwargs['method'],
+        )
+        return {
+            link: int(np.digitize(info['pseudotime'], self.switch_pseudotimes, right=True)) + 1
+            for link, info in reg_pt.items()
+        }
+
+    def _force_curves_for(self, links):
+        """Force curves for arbitrary ``links`` via the GRN, without touching ``waves``."""
+        curves = self.waves.curves
+        beta_curves, dtime = curves.get_beta_curves(links, varname=self.varname)
+        tf_expression, _ = curves.get_smoothed_curves(mode='tf_expression')
+        regulon_tf_expression = tf_expression.loc[
+            beta_curves.index.get_level_values(0).unique()
+        ]
+        force_curves = SmoothedCurvesGRN.calculate_force_curves(
+            beta_curves, regulon_tf_expression
+        )
+        return force_curves, dtime
+
+    # ------------------------------------------------------------------
+    # public API
+    # ------------------------------------------------------------------
+
+    def run(self, n_tf=40, n_target=40, exclude='tf_and_target', random_state=0):
+        """Build the per-wave enriched-vs-random comparison table.
+
+        A pool of ``n_tf`` x ``n_target`` random non-enriched links is scored and
+        binned into waves; within each wave a random subset is drawn to match the
+        number of enriched links in that wave.
+
+        Parameters
+        ----------
+        n_tf, n_target : int
+            Size of the random candidate pool (``n_tf`` x ``n_target`` links).
+        exclude : str
+            How the random pool is kept "non-enriched":
+
+            * ``'tf_and_target'`` (default): drop *every* enriched TF and *every*
+              enriched target from the sampling universe, so no random link shares
+              even a single TF or target with the enriched set.
+            * ``'links'``: keep the full TF/target universe and only remove the
+              exact enriched ``(TF, Target)`` pairs, so a random link may reuse one
+              of your TFs or targets as long as that specific pair is not enriched.
+        random_state : int
+            Seed for reproducible sampling.
+
+        Returns
+        -------
+        pandas.DataFrame with columns ``link, wave, group, abs_max_force`` where
+        ``group`` is ``'enriched'`` or ``'random'``. Also stored on ``self.result_``.
+        """
+        rng = np.random.default_rng(random_state)
+        d = self.waves.dictys_dynamic_object
+
+        # --- enriched: waves + abs max force (from already-computed forces) ---
+        enr_fc = self.waves.force_curves
+        if enr_fc is None:
+            raise RuntimeError(
+                "waves.force_curves is empty -- call "
+                "waves.compute_forces(enriched_links) before validating."
+            )
+        present = [l for l in self.enriched_links if l in enr_fc.index]
+        missing = [l for l in self.enriched_links if l not in enr_fc.index]
+        if missing:
+            print(f"WaveValidation: {len(missing)} enriched links absent from "
+                  f"force_curves, skipped: {missing}")
+        enr_waves = self._assign_waves(enr_fc.loc[present], self.waves.dtime)
+        enr_force = self._abs_max_force(enr_fc, present)
+        n_per_wave = Counter(enr_waves.values())
+
+        # --- random pool of non-enriched links (exclusion mode set by `exclude`) ---
+        nname = np.asarray(d.nname)
+        tf_universe = nname[np.asarray(d.nids[0])]
+        target_universe = nname[np.asarray(d.nids[1])]
+        enriched_set = set(self.enriched_links)
+
+        if exclude == 'tf_and_target':
+            enr_tfs = {tf for tf, _ in self.enriched_links}
+            enr_targets = {tg for _, tg in self.enriched_links}
+            cand_tfs = np.array([t for t in tf_universe if t not in enr_tfs])
+            cand_targets = np.array([g for g in target_universe if g not in enr_targets])
+        elif exclude == 'links':
+            cand_tfs = np.asarray(tf_universe)
+            cand_targets = np.asarray(target_universe)
+        else:
+            raise ValueError("exclude must be 'tf_and_target' or 'links'.")
+
+        pick_tfs = rng.choice(cand_tfs, size=min(n_tf, len(cand_tfs)), replace=False)
+        pick_targets = rng.choice(cand_targets, size=min(n_target, len(cand_targets)),
+                                  replace=False)
+        # drop exact enriched pairs (a no-op under 'tf_and_target', essential under 'links')
+        pool_links = [(tf, tg) for tf in pick_tfs for tg in pick_targets
+                      if (tf, tg) not in enriched_set]
+
+        rnd_fc, rnd_dtime = self._force_curves_for(pool_links)
+        rnd_waves = self._assign_waves(rnd_fc, rnd_dtime)
+        rnd_force = self._abs_max_force(rnd_fc, list(rnd_fc.index))
+
+        pool_by_wave = defaultdict(list)
+        for link, w in rnd_waves.items():
+            pool_by_wave[w].append(link)
+
+        # --- assemble tidy table (size-matched random per wave) ---
+        rows = [{'link': link, 'wave': w, 'group': 'enriched',
+                 'abs_max_force': enr_force[link]}
+                for link, w in enr_waves.items()]
+
+        for w, n in n_per_wave.items():
+            cands = pool_by_wave.get(w, [])
+            if len(cands) < n:
+                print(f"WaveValidation: wave {w} has only {len(cands)} random links "
+                      f"in the pool (< {n} enriched); using all. Increase n_tf/n_target.")
+            chosen_idx = rng.choice(len(cands), size=min(n, len(cands)), replace=False) \
+                if cands else []
+            for i in chosen_idx:
+                link = cands[i]
+                rows.append({'link': link, 'wave': w, 'group': 'random',
+                             'abs_max_force': rnd_force[link]})
+
+        self.result_ = (
+            pd.DataFrame(rows)
+            .sort_values(['wave', 'group'])
+            .reset_index(drop=True)
+        )
+        return self.result_
+
+    def plot(self, figsize=(8, 6), ylabel='Abs max TF force',
+             colors=('#d1495b', '#9aa0a6')):
+        """Box plot of abs-max TF force, enriched vs random, grouped by wave."""
+        if self.result_ is None:
+            self.run()
+        df = self.result_
+        waves_sorted = sorted(df['wave'].unique())
+        groups = [('enriched', 'Enriched (FireFate)'),
+                  ('random', 'Random (non-enriched)')]
+        width = 0.35
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        for gi, (g, _label) in enumerate(groups):
+            offset = (gi - 0.5) * width
+            positions, data = [], []
+            for wi, w in enumerate(waves_sorted):
+                vals = df[(df['wave'] == w) & (df['group'] == g)]['abs_max_force'].values
+                positions.append(wi + offset)
+                data.append(vals)
+            bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                            patch_artist=True, showfliers=False,
+                            medianprops=dict(color='black'))
+            for patch in bp['boxes']:
+                patch.set_facecolor(colors[gi])
+                patch.set_alpha(0.6)
+            # one jittered point per link
+            for pos, vals in zip(positions, data):
+                if len(vals) == 0:
+                    continue
+                x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+                ax.scatter(x, vals, color=colors[gi], edgecolor='black',
+                           linewidth=0.4, s=22, zorder=3)
+
+        ax.set_xticks(range(len(waves_sorted)))
+        ax.set_xticklabels([f'Wave {w}' for w in waves_sorted])
+        ax.set_ylabel(ylabel)
+        handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
+                   for gi in range(len(groups))]
+        ax.legend(handles, [label for _, label in groups], frameon=False)
+        return fig, ax
+
+    def plot_overall(self, figsize=(5, 6), ylabel='Abs max TF force',
+                     colors=('#d1495b', '#9aa0a6')):
+        """Box plot of abs-max TF force, enriched vs random, pooled across all waves."""
+        if self.result_ is None:
+            self.run()
+        df = self.result_
+        groups = [('enriched', 'Enriched (FireFate)'),
+                  ('random', 'Random (non-enriched)')]
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        data = [df[df['group'] == g]['abs_max_force'].values for g, _ in groups]
+        bp = ax.boxplot(data, positions=[0, 1], widths=0.5, patch_artist=True,
+                        showfliers=False, medianprops=dict(color='black'))
+        for patch, c in zip(bp['boxes'], colors):
+            patch.set_facecolor(c)
+            patch.set_alpha(0.6)
+        for pos, (vals, c) in enumerate(zip(data, colors)):
+            if len(vals) == 0:
+                continue
+            x = pos + (np.random.rand(len(vals)) - 0.5) * 0.25
+            ax.scatter(x, vals, color=c, edgecolor='black', linewidth=0.4, s=22, zorder=3)
+
+        ax.set_xticks([0, 1])
+        ax.set_xticklabels([label for _, label in groups])
+        ax.set_ylabel(ylabel)
+        return fig, ax
