@@ -24,6 +24,7 @@ from scipy.stats import hypergeom
 from scipy.ndimage import gaussian_filter1d
 from tqdm import tqdm
 
+from firefate.core.stat_extensions import lcpm_tf
 from firefate.utils.custom import *
 
 
@@ -79,7 +80,7 @@ class SmoothedCurvesGRN:
             stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
             stat1_y = stat.flnneighbor(stat1_net, weighted_sparsity=self.sparsity)
         elif mode_to_use == "tf_expression":
-            stat1_y = fsmooth(stat.lcpm_tf(self.dictys_dynamic_object, cut=0))
+            stat1_y = fsmooth(lcpm_tf(self.dictys_dynamic_object, cut=0))
         elif mode_to_use == "expression":
             stat1_y = fsmooth(stat.lcpm(self.dictys_dynamic_object, cut=0))
         else:
@@ -390,14 +391,16 @@ class SmoothedCurvesChromatin:
     across genomic windows and pseudotime trajectories.
     """
 
-    def __init__(self, tfs: List[str], base_path: str):
+    def __init__(self, tfs: Optional[List[str]], base_path: str):
         """
         Initialize the chromatin accessibility data analyzer.
 
-        Parameters:
-        -----------
-        tfs : list
-            List of Transcription Factors to query.
+        Parameters
+        ----------
+        tfs : list of str, or None
+            Transcription factors to query. If None, all TFs found across the
+            binding files will be loaded; the union is materialized as `self.tfs`
+            after `extract_data()` runs.
         base_path : str
             Base path to the binding.tsv.gz files (e.g., 'path/to/tmp_dynamic').
         """
@@ -420,42 +423,61 @@ class SmoothedCurvesChromatin:
         self.series_gc: Dict[str, np.ndarray] = {}
 
     @staticmethod
-    def _process_single_window(i: int, tfs: List[str], base_path: str) -> Tuple[int, Dict, Dict]:
+    def _process_single_window(
+        i: int,
+        tfs: Optional[List[str]],
+        base_path: str,
+    ) -> Tuple[int, Dict[str, float], Dict[str, float]]:
         """
-        Static worker method for multiprocessing. 
-        Must be static to be pickleable by multiprocessing.Pool.
+        Static worker for multiprocessing.
+
+        If `tfs` is None, returns scores/counts for every TF present in this
+        window's file. If `tfs` is a list, behaves as before: returns NaN/0 for
+        TFs absent from the file.
         """
         try:
-            # Read the binding file
-            file_path = f'{base_path}/Subset{i}/binding.tsv.gz'
-            df = pd.read_csv(file_path, sep='\t', compression='gzip')
-            
-            # Efficient string parsing
-            if 'loc' in df.columns:
-                df[['chr', 'start', 'end']] = df['loc'].str.split(':', expand=True)
-            
-            window_scores = {}
-            window_counts = {}
-            
-            # Group once to avoid repeated filtering of TFs
-            grouped = df.groupby('TF')
-            
-            for tf in tfs:
+            file_path = f"{base_path}/Subset{i}/binding.tsv.gz"
+            df = pd.read_csv(file_path, sep="\t", compression="gzip")
+
+            if "loc" in df.columns:
+                df[["chr", "start", "end"]] = df["loc"].str.split(":", expand=True)
+
+            grouped = df.groupby("TF")
+
+            # Decide which TFs this worker should emit
+            if tfs is None:
+                tfs_to_process = list(grouped.groups.keys())
+                return_defaults_for_missing = False
+            else:
+                tfs_to_process = tfs
+                return_defaults_for_missing = True
+
+            window_scores: Dict[str, float] = {}
+            window_counts: Dict[str, float] = {}
+
+            for tf in tfs_to_process:
                 if tf in grouped.groups:
                     tf_df = grouped.get_group(tf)
-                    # Mean score across chromosomes
-                    window_scores[tf] = tf_df.groupby('chr').agg({'score': 'mean'}).mean().values[0]
-                    # Count OCRs across chromosomes
-                    window_counts[tf] = tf_df.groupby('chr').agg({'score': 'count'}).mean().values[0]
-                else:
-                    window_scores[tf] = float('nan')
+                    window_scores[tf] = (
+                        tf_df.groupby("chr").agg({"score": "mean"}).mean().values[0]
+                    )
+                    window_counts[tf] = (
+                        tf_df.groupby("chr").agg({"score": "count"}).mean().values[0]
+                    )
+                elif return_defaults_for_missing:
+                    window_scores[tf] = float("nan")
                     window_counts[tf] = 0
-            
+                # if tfs is None and TF not in grouped: just skip — won't happen
+                # since tfs_to_process came from grouped.groups in that branch.
+
             return (i, window_scores, window_counts)
-        
-        except Exception as e:
-            # Silent fail for individual windows to keep process alive, but return safe defaults
-            return (i, {tf: float('nan') for tf in tfs}, {tf: 0 for tf in tfs})
+
+        except Exception:
+            # Safe defaults: unknown TFs in the None case → empty dicts;
+            # the union step will simply not see this window's contributions.
+            if tfs is None:
+                return (i, {}, {})
+            return (i, {tf: float("nan") for tf in tfs}, {tf: 0 for tf in tfs})
 
     @staticmethod
     def _to_float(v):
@@ -476,40 +498,51 @@ class SmoothedCurvesChromatin:
     def extract_data(self, n_windows: int = 194, n_processes: int = None):
         """
         Multiprocess the extraction of TF binding data across all windows.
-        Populates self.raw_scores and self.raw_counts.
+
+        If `self.tfs` is None, discovers the full union of TFs present across
+        all window files and stores it as `self.tfs` on completion.
+        Populates `self.raw_scores` and `self.raw_counts`.
         """
-        # Initialize result dictionaries
-        self.raw_scores = {tf: [None] * n_windows for tf in self.tfs}
-        self.raw_counts = {tf: [None] * n_windows for tf in self.tfs}
-        
         if n_processes is None:
             n_processes = max(1, cpu_count() - 1)
-        
+
         print(f"Processing {n_windows} windows using {n_processes} processes...")
-        
-        # Prepare arguments for the static worker
+
         process_func = partial(
-            SmoothedCurvesChromatin._process_single_window, 
-            tfs=self.tfs, 
-            base_path=self.base_path
+            SmoothedCurvesChromatin._process_single_window,
+            tfs=self.tfs,                   # None propagates to workers
+            base_path=self.base_path,
         )
-        
+
         with Pool(processes=n_processes) as pool:
             results = list(tqdm(
                 pool.imap(process_func, range(1, n_windows + 1)),
                 total=n_windows,
-                desc="Extracting Binding Data"
+                desc="Extracting Binding Data",
             ))
-        
-        # Collect results
+
+        # If tfs was None, resolve the union of TFs seen across all windows.
+        if self.tfs is None:
+            all_tfs = set()
+            for _, w_scores, _ in results:
+                all_tfs.update(w_scores.keys())
+            self.tfs = sorted(all_tfs)
+            print(f"Discovered {len(self.tfs)} TFs across all windows.")
+
+        # Allocate storage with sentinels (NaN for score, 0 for count) and fill.
+        self.raw_scores = {tf: [np.nan] * n_windows for tf in self.tfs}
+        self.raw_counts = {tf: [0] * n_windows for tf in self.tfs}
+
         for window_idx, w_scores, w_counts in results:
-            # Adjust 1-based index to 0-based list index
             idx = window_idx - 1
-            if 0 <= idx < n_windows:
-                for tf in self.tfs:
-                    self.raw_scores[tf][idx] = w_scores.get(tf, np.nan)
+            if not (0 <= idx < n_windows):
+                continue
+            for tf in self.tfs:
+                if tf in w_scores:
+                    self.raw_scores[tf][idx] = w_scores[tf]
                     self.raw_counts[tf][idx] = w_counts.get(tf, 0)
-        
+                # else: leave the NaN/0 sentinel in place
+
         print("Extraction complete.")
 
     # ------------------------------------------------------------------
