@@ -15,10 +15,10 @@ class Config:
         Initialize the config object.
         """
         # Base paths
-        self._BCELL_BASE = '/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2'
+        self._BCELL_BASE = '/work/nvme/bhdw/asachan/data_files/firefate/bcell'
         self._TCELL_BASE = '/ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc'
-        self.OUTPUT_FOLDER = f'{self._BCELL_BASE}/output/figures'
-        self.INPUT_FOLDER = f'{self._BCELL_BASE}/output/intermediate_tmp_files'
+        self.OUTPUT_FOLDER = f'{self._BCELL_BASE}/outs/figures'
+        self.INPUT_FOLDER = f'{self._BCELL_BASE}/outs/intermediate_tmp_files'
         self.CELL_LABELS = f'{self._BCELL_BASE}/data/clusters.csv'
         
         # State discriminative LFs
