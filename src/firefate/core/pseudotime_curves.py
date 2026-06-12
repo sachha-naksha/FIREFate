@@ -4,7 +4,7 @@ import multiprocessing as mp
 from multiprocessing import Pool, cpu_count
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from functools import partial
 from typing import List, Dict, Tuple, Optional, Union
 
@@ -52,7 +52,7 @@ class SmoothedCurvesGRN:
         self.mode = mode
     
     def get_smoothed_curves(
-        self, mode=None
+        self, mode=None, n_jobs=None
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Compute expression (lcpm) and regulation (ltarget_count) curves over pseudotime
@@ -64,18 +64,26 @@ class SmoothedCurvesGRN:
             ``(curves_dataframe, pseudotime_series)``.
         """
 
-        # sample equispaced points and instantiate smoothing function    
+        # sample equispaced points and instantiate smoothing function
         pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
-        
+
         # Use provided mode or fall back to instance mode
         mode_to_use = mode if mode is not None else self.mode
 
+        # Pseudo time values (x axis). First gene's pseudotime is returned as all
+        # genes share the same pseudotime over the pseudo-bulked cells in the window.
+        stat1_x = stat.pseudotime(self.dictys_dynamic_object, pts)
+        dx = pd.Series(stat1_x.compute(pts)[0])
+
         if mode_to_use == "regulation":
-            # Log number of targets
-            stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
-            stat1_netbin = stat.fbinarize(stat1_net, sparsity=self.sparsity)
-            stat1_y = stat.flnneighbor(stat1_netbin)
-        elif mode_to_use == "weighted_regulation":
+            # Log number of targets. Parallel, NaN-aware reimplementation of the
+            # dictys chain flnneighbor(fbinarize(fsmooth(net), sparsity)); the
+            # per-point sparsity threshold + outdegree dominate runtime and are
+            # independent across points, so they are spread over CPU cores.
+            dy = self._regulation_curves_parallel(pts, fsmooth, n_jobs=n_jobs)
+            return dy, dx
+
+        if mode_to_use == "weighted_regulation":
             # Log weighted outdegree
             stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
             stat1_y = stat.flnneighbor(stat1_net, weighted_sparsity=self.sparsity)
@@ -85,16 +93,69 @@ class SmoothedCurvesGRN:
             stat1_y = fsmooth(stat.lcpm(self.dictys_dynamic_object, cut=0))
         else:
             raise ValueError(f"Unknown mode {mode_to_use}.")
-            
-        # Pseudo time values (x axis)
-        stat1_x = stat.pseudotime(self.dictys_dynamic_object, pts)
-        tmp_y = stat1_y.compute(pts)
-        tmp_x = stat1_x.compute(pts)
-        dy = pd.DataFrame(tmp_y, index=stat1_y.names[0])
-        dx = pd.Series(tmp_x[0])  # first gene's pseudotime is returned as all genes have the same pseudotime over the pseudo-bulked cells in the window
-        
+
+        dy = pd.DataFrame(stat1_y.compute(pts), index=stat1_y.names[0])
         return dy, dx
-    
+
+    def _regulation_curves_parallel(self, pts, fsmooth, n_jobs=None) -> pd.DataFrame:
+        """Parallel equivalent of ``flnneighbor(fbinarize(fsmooth(net), sparsity))``.
+
+        Reproduces the dictys ``regulation`` chain exactly (verified bit-for-bit)
+        but replaces two bottlenecks:
+
+        * dictys' Gaussian smoothing rebuilds full-size ``isnan``/``nan_to_num``
+          temporaries on every call; here the smoothing is a single NaN-aware
+          matmul (``point.smoothen`` with ``nan='ignore'`` semantics).
+        * the per-point top-``k`` sparsity threshold + outdegree run in a serial
+          Python loop in ``stat.fbinarize``; each pseudotime point is independent,
+          so they are spread across ``n_jobs`` threads (the heavy NumPy ops release
+          the GIL and share the smoothed array without copying).
+
+        Returns ``(n_regulator, n_point)`` DataFrame of ``log2(outdegree + 1)``.
+        """
+        if n_jobs is None:
+            n_jobs = min(16, cpu_count())
+
+        # Building the smoothing stat precomputes the node-filtered network array.
+        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
+        fs = stat1_net.func_smooth
+        pt = fs.func.__self__            # node-filtered dictys.traj.point
+        data = fs.args[0]                # (n_reg, n_target, n_node)
+        radius = fs.args[1]
+        w = pt.weight_conv(pts, radius)  # (n_node, n_pts), column-normalised Gaussian
+
+        n_reg, n_target, _ = data.shape
+        n_pts = len(pts)
+        # Number of strongest edges kept per point (matches stat.fbinarize).
+        k = int(self.sparsity * n_reg * n_target)
+
+        # Gaussian smoothing, NaN-aware (mirrors point.smoothen nan='ignore'):
+        # nan entries contribute zero weight and a point is nan only if every
+        # contributing node is nan. The no-nan branch is the identical result.
+        if np.isnan(data).any():
+            mask = (~np.isnan(data)).astype(data.dtype)
+            den = mask @ w
+            smoothed = (np.nan_to_num(data) @ w) / (den + 1e-300)
+            smoothed[den == 0] = np.nan
+        else:
+            smoothed = data @ w          # (n_reg, n_target, n_pts), BLAS-threaded
+        np.abs(smoothed, out=smoothed)   # signed binarisation ranks by |weight|
+
+        # Per-point: keep top-k edges, count outdegree per regulator, log2(.+1).
+        dy = np.empty((n_reg, n_pts), dtype=np.float64)
+
+        def _fill(cols):
+            for j in cols:
+                arr = smoothed[:, :, j]
+                cut = np.partition(arr.ravel(), -k)[-k]
+                dy[:, j] = np.log2((arr >= cut).sum(axis=1) + 1.0)
+
+        col_chunks = [c.tolist() for c in np.array_split(np.arange(n_pts), n_jobs) if len(c)]
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            list(ex.map(_fill, col_chunks))
+
+        return pd.DataFrame(dy, index=stat1_net.names[0])
+
     def get_beta_curves(self, specified_links: list, varname: str = 'w_in'):
         """
         get beta curves for specified links; 
