@@ -408,7 +408,7 @@ def plot_tf_episodic_enrichment_dotplot(
     cbar.ax.tick_params(labelsize=8)
 
     # 14. Final formatting
-    ax_main.grid(True, linestyle='--', alpha=0.3, axis='both')
+    ax_main.grid(False)
     ax_main.tick_params(axis='both', which='major', pad=5)
     
     # Always invert y-axis so first item is at top

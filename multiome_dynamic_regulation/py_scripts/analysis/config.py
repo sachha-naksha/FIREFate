@@ -17,7 +17,7 @@ class Config:
         # Base paths
         self._BCELL_BASE = '/work/nvme/bhdw/asachan/data_files/firefate/bcell'
         self._TCELL_BASE = '/ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc'
-        self.OUTPUT_FOLDER = f'{self._BCELL_BASE}/outs/figures'
+        self.OUTPUT_FOLDER = '/projects/bhdw/asachan/papers/firefate/figures'
         self.INPUT_FOLDER = f'{self._BCELL_BASE}/outs/intermediate_tmp_files'
         self.CELL_LABELS = f'{self._BCELL_BASE}/data/clusters.csv'
         
