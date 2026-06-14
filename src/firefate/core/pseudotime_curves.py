@@ -405,6 +405,54 @@ class SmoothedCurvesGRN:
         )
         return df
 
+    # Map the internal global-activity classes to the four wave-pattern names.
+    WAVE_PATTERN_NAMES = {
+        "Cumulative": "up",
+        "Reductive": "down",
+        "Bell wave": "transiently_up",
+        "U-shaped": "transiently_down",
+    }
+
+    def classify_wave_patterns(self, dx, dy, tf_list=None):
+        """
+        Classify each TF's curve into one of four wave patterns:
+        ``up``, ``down``, ``transiently_up``, ``transiently_down``.
+
+        The up/down vs transient decision compares z-scored terminal and
+        transient logFC across the curves in ``dy`` (see
+        ``classify_tf_global_activity``). Pass the full ``dy`` (all TFs) for a
+        stable classification; ``tf_list`` only filters the returned rows.
+
+        Parameters
+        ----------
+        dx : ndarray
+            Pseudotime values.
+        dy : pandas.DataFrame
+            Smoothed curves, indexed by TF name (e.g. from
+            ``get_smoothed_curves(mode="regulation")``).
+        tf_list : list of str, optional
+            TFs to keep in the output. If None, all TFs are returned.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Indexed by TF, with a ``trajectory`` column and a ``wave_pattern``
+            column (one of the four categories), alongside the diagnostic
+            columns from ``classify_tf_global_activity``.
+        """
+        df = self.classify_tf_global_activity(
+            dx, dy.values if hasattr(dy, "values") else dy,
+            "terminal_logfc", "transient_logfc",
+        )
+        df.index = dy.index
+        df["wave_pattern"] = df["tf_class"].map(self.WAVE_PATTERN_NAMES)
+        df["trajectory"] = [self.trajectory_range] * len(df)
+
+        if tf_list is not None:
+            df = df.loc[df.index.intersection(tf_list)]
+
+        return df
+
     def get_top_k_tfs_by_class(self, dx, dy, k=20):
         """
         get top k tfs from each class based on their relevant ranks
