@@ -24,6 +24,7 @@ are the canonical implementation; :class:`TFForceWaves` reuses them.
 """
 
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -572,8 +573,14 @@ class TFForceWaves:
         Returns the force-curve DataFrame and stores ``beta_curves``,
         ``regulon_tf_expression``, ``force_curves`` and ``dtime`` on ``self``.
         """
-        beta_curves, dtime = self.curves.get_beta_curves(links, varname=varname)
-        tf_expression, _ = self.curves.get_smoothed_curves(mode='tf_expression')
+        # beta-network curves and TF-expression curves are two independent dictys
+        # `.compute` passes over the trajectory; overlap them (both release the GIL
+        # in their NumPy/BLAS work).
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            beta_future = ex.submit(self.curves.get_beta_curves, links, varname=varname)
+            tf_future = ex.submit(self.curves.get_smoothed_curves, mode='tf_expression')
+            beta_curves, dtime = beta_future.result()
+            tf_expression, _ = tf_future.result()
         regulon_tf_expression = tf_expression.loc[
             beta_curves.index.get_level_values(0).unique()
         ]
@@ -787,7 +794,7 @@ class WaveValidation:
     # public API
     # ------------------------------------------------------------------
 
-    def run(self, n_tf=40, n_target=40, exclude='tf_and_target', random_state=0):
+    def run(self, n_tf=None, n_target=None, exclude='tf_and_target', random_state=0):
         """Build the per-wave enriched-vs-random comparison table.
 
         A pool of ``n_tf`` x ``n_target`` random non-enriched links is scored and
@@ -796,8 +803,13 @@ class WaveValidation:
 
         Parameters
         ----------
-        n_tf, n_target : int
+        n_tf, n_target : int, optional
             Size of the random candidate pool (``n_tf`` x ``n_target`` links).
+            When left as ``None`` (default), they are taken from the enriched set
+            itself -- ``n_tf`` = number of unique enriched TFs and ``n_target`` =
+            number of unique enriched targets -- so the random pool mirrors the
+            shape of the enriched links it is compared against rather than using a
+            hardcoded size.
         exclude : str
             How the random pool is kept "non-enriched":
 
@@ -839,10 +851,16 @@ class WaveValidation:
         tf_universe = nname[np.asarray(d.nids[0])]
         target_universe = nname[np.asarray(d.nids[1])]
         enriched_set = set(self.enriched_links)
+        enr_tfs = {tf for tf, _ in self.enriched_links}
+        enr_targets = {tg for _, tg in self.enriched_links}
+
+        # default pool size = shape of the enriched set it is compared against
+        if n_tf is None:
+            n_tf = len(enr_tfs)
+        if n_target is None:
+            n_target = len(enr_targets)
 
         if exclude == 'tf_and_target':
-            enr_tfs = {tf for tf, _ in self.enriched_links}
-            enr_targets = {tg for _, tg in self.enriched_links}
             cand_tfs = np.array([t for t in tf_universe if t not in enr_tfs])
             cand_targets = np.array([g for g in target_universe if g not in enr_targets])
         elif exclude == 'links':

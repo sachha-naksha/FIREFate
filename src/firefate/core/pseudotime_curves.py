@@ -156,29 +156,75 @@ class SmoothedCurvesGRN:
 
         return pd.DataFrame(dy, index=stat1_net.names[0])
 
+    def _subnetwork_curves(self, TF_indices, target_indices, varname):
+        """Smoothed signed network for the given TF/target indices only.
+
+        Computes just the requested sub-network instead of smoothing the whole
+        GRN and slicing afterwards: the per-node network array is sliced to the
+        queried TFs/targets *before* the Gaussian smoothing matmul, so the full
+        ``(n_reg, n_target, n_pts)`` smoothed network is never materialised. The
+        per-node data and weights are exactly those used by
+        :meth:`_regulation_curves_parallel`; the signed smoothing here is the
+        un-binarised version of that path (no ``abs``/top-``k``).
+
+        Returns ``(subnetworks, dtime)`` with ``subnetworks`` of shape
+        ``(len(TF_indices), len(target_indices), n_pts)``.
+        """
+        # sample evenly spaced points along the trajectory
+        pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
+        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object, varname=varname))
+        fs = stat1_net.func_smooth
+        pt = fs.func.__self__            # node-filtered dictys.traj.point
+        data = fs.args[0]                # (n_reg, n_target, n_node), per-node network
+        radius = fs.args[1]
+        w = pt.weight_conv(pts, radius)  # (n_node, n_pts), column-normalised Gaussian
+
+        # slice to the queried TFs/targets before smoothing
+        sub = data[np.ix_(TF_indices, target_indices, range(data.shape[2]))]
+
+        # Gaussian smoothing, NaN-aware (mirrors point.smoothen nan='ignore'); signed
+        # -- these are the raw beta coefficients, so no abs/binarisation.
+        if np.isnan(sub).any():
+            mask = (~np.isnan(sub)).astype(sub.dtype)
+            den = mask @ w
+            subnetworks = (np.nan_to_num(sub) @ w) / (den + 1e-300)
+            subnetworks[den == 0] = np.nan
+        else:
+            subnetworks = sub @ w        # (n_tf, n_target, n_pts)
+
+        dtime = pd.Series(stat.pseudotime(self.dictys_dynamic_object, pts).compute(pts)[0])
+        return subnetworks, dtime
+
     def get_beta_curves(self, specified_links: list, varname: str = 'w_in'):
         """
-        get beta curves for specified links; 
+        get beta curves for specified links;
         varname: 'w_in' for normalized total effect network, 'w_n' for normalized direct effect network, 'w' for non-normalized direct effect network
         """
-        
+
         # getting the TF and target indices for querying the network
         tf_list = list(set([link[0] for link in specified_links]))
         TF_indices, _, missing_tfs = get_tf_indices(self.dictys_dynamic_object, tf_list)
         target_list = list(set([link[1] for link in specified_links]))
         target_indices = get_gene_indices(self.dictys_dynamic_object, target_list)
 
-        # sample evenly spaced points along the trajectory
-        pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
-        # get the total effect (direct + indirect) network
-        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object,varname=varname))
-        stat1_x=stat.pseudotime(self.dictys_dynamic_object,pts)
-        dnet = stat1_net.compute(pts)
-        dtime = pd.Series(stat1_x.compute(pts)[0])
-        subnetworks = dnet[np.ix_(TF_indices, target_indices, range(dnet.shape[2]))]
-        
-        # create multi-index tuples for all combinations of TF-target pairs
-        index_tuples = [(tf, target) for tf in tf_list for target in target_list]
+        # compute only the queried sub-network (the full GRN is never smoothed)
+        subnetworks, dtime = self._subnetwork_curves(TF_indices, target_indices, varname)
+
+        # _subnetwork_curves keeps only the TFs/targets present in the network, so
+        # build the index from the same found TFs/targets (in TF_indices /
+        # target_indices order) to stay aligned with the data; otherwise the missing
+        # genes make the index longer than the reshaped array.
+        ndict = self.dictys_dynamic_object.ndict
+        missing_tf_set = set(missing_tfs)
+        found_tfs = [tf for tf in tf_list if tf not in missing_tf_set]
+        found_targets = [target for target in target_list if target in ndict]
+        n_missing_targets = len(target_list) - len(found_targets)
+        if missing_tfs or n_missing_targets:
+            print(f"get_beta_curves: skipping {len(missing_tfs)} TF(s) and "
+                  f"{n_missing_targets} target(s) not present in the network.")
+
+        # create multi-index tuples for all found TF-target combinations
+        index_tuples = [(tf, target) for tf in found_tfs for target in found_targets]
         multi_index = pd.MultiIndex.from_tuples(index_tuples, names=['TF', 'Target'])
 
         # reshape the subnetworks array to 2D (pairs × time points)
