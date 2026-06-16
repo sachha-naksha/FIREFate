@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Manage Claude Code parallel worktrees for FIREFate.
+# Worktrees live under ./worktrees/<name> (gitignored) on branch wt/<name>.
+#   ./wt new <name> [base]   create worktree from <base> (default: current HEAD)
+#   ./wt ls                  list worktrees
+#   ./wt rm <name>           remove worktree (keeps the wt/<name> branch)
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+WTDIR="$ROOT/worktrees"
+
+cmd="${1:-}"; shift || true
+
+case "$cmd" in
+  new)
+    name="${1:?usage: ./wt new <name> [base]}"
+    base="${2:-HEAD}"
+    path="$WTDIR/$name"
+    git -C "$ROOT" worktree add -b "wt/$name" "$path" "$base"
+    # Propagate the (untracked) Claude permission allowlist so the parallel
+    # agent inherits the same settings instead of re-prompting.
+    mkdir -p "$path/.claude"
+    ln -sf "$ROOT/.claude/settings.local.json" "$path/.claude/settings.local.json"
+    echo
+    echo "Created $path on branch wt/$name"
+    echo "Run an agent there with:  cd $path && claude"
+    ;;
+  ls)
+    git -C "$ROOT" worktree list
+    ;;
+  rm)
+    name="${1:?usage: ./wt rm <name>}"
+    git -C "$ROOT" worktree remove "$WTDIR/$name"
+    echo "Removed worktree $name (branch wt/$name kept; delete with: git branch -D wt/$name)"
+    ;;
+  *)
+    sed -n '2,6p' "$0"; exit 1
+    ;;
+esac

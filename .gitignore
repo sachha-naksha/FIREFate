@@ -244,3 +244,6 @@ multiome_dynamic_regulation/py_scripts/trajectory/t_cell_imputation.ipynb
 *.bw
 *.tsv.gz
 *.csv.gz
+
+# Claude Code parallel worktrees (kept inside repo, not tracked)
+/worktrees/

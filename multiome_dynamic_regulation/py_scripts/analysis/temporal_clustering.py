@@ -1,26 +1,39 @@
-"""Temporal clustering of regulatory links into waves.
+"""Temporal clustering of regulatory links into phases of regulation.
 
-Refactor of ``waves_quantification.ipynb`` into three classes:
+Nomenclature (kept consistent with the biology this module describes):
 
-- :class:`FateFrequency` -- cell-state composition over pseudotime. Produces
+- **wave** -- a single TF-Target force linkage that rises and falls (a "force
+  wave") along the lineage trajectory. One wave = one link's force curve.
+- **state** -- the cell-state label a cell carries.
+- **phase** -- a temporal cluster of regulatory links whose force-wave peaks
+  fall in the same interval of pseudotime, the intervals being delimited by
+  cell-state termination pseudotimes (3 phases for PB, 2 for GC).
+
+Refactor of ``waves_quantification.ipynb`` into:
+
+- :class:`StateFrequency` -- cell-state composition over pseudotime. Produces
   fate-frequency trajectories (stacked-bar and composition-curve plots), finds
   per-state extrema, and exposes the pseudotime at which a state "terminates"
-  (``termination_pseudotime``). Those termination pseudotimes are the wave-switch boundaries
-  consumed by :class:`TFForceWaves`.
+  (``termination_pseudotime``). Those termination pseudotimes are the phase
+  boundaries consumed by :class:`RegulatoryPhases`.
 
-- :class:`TFForceWaves` -- TF force trajectories over pseudotime. Plots TF
-  expression / regulation curves, computes regulatory forces for a set of links,
-  renders the 3D force landscape of a single link, runs the softmax peak-finding
-  per force curve, draws the clustered force heatmap, and classifies links into
-  waves by binning each link's softmax peak pseudotime against the cell-state
-  termination pseudotimes (3 waves for PB, 2 for GC).
+- :class:`TFForceWaves` -- TF force waves over pseudotime. Plots TF expression /
+  regulation curves, computes regulatory force curves for a set of links,
+  renders the 3D force landscape of a single link, and draws the clustered force
+  heatmap. Its nested :class:`TFForceWaves.ForceSelector` picks per-link forces
+  either lineage-specific (one branch) or combined across lineages.
 
-- :class:`WaveValidation` -- (skeleton) compares the FireFate links against
-  random links in the data frame, split by wave. Implementation pending.
+- :class:`RegulatoryPhases` -- classification of input links into phases given
+  the cell-state termination pseudotimes (softmax peak-pseudotime per force wave,
+  binned against the boundaries).
+
+- :class:`TFForceValidation` / :class:`PhaseValidation` -- compare the FireFate
+  links against size-matched random links by abs-max TF force, pooled across the
+  trajectory or split by phase.
 
 The module-level softmax helpers (:func:`get_max_points`,
-:func:`aggregate_max_points`, :func:`order_links_by_wave`, :func:`order_links`)
-are the canonical implementation; :class:`TFForceWaves` reuses them.
+:func:`aggregate_max_points`, :func:`order_links_by_phase`, :func:`order_links`)
+are the canonical implementation; :class:`RegulatoryPhases` reuses them.
 """
 
 from collections import Counter, defaultdict
@@ -157,9 +170,9 @@ def aggregate_max_points(max_points, method='weighted_mean'):
     return aggregated
 
 
-def order_links_by_wave(regulation_pseudotimes):
+def order_links_by_phase(regulation_pseudotimes):
     """
-    Order TF-Target links into waves by ascending peak pseudotime.
+    Order TF-Target links into phases by ascending peak pseudotime.
 
     Parameters:
     -----------
@@ -178,7 +191,7 @@ def order_links_by_wave(regulation_pseudotimes):
 
 def order_links(force_curves, dtime, top_k=5, temperature=1.0, method='weighted_mean'):
     """
-    Convenience wrapper: compute the wave ordering of links directly from force curves.
+    Convenience wrapper: compute the phase ordering of links directly from force curves.
 
     Parameters:
     -----------
@@ -197,20 +210,20 @@ def order_links(force_curves, dtime, top_k=5, temperature=1.0, method='weighted_
     """
     max_points = get_max_points(force_curves, dtime, top_k=top_k, temperature=temperature)
     regulation_pseudotimes = aggregate_max_points(max_points, method=method)
-    ordered_links = order_links_by_wave(regulation_pseudotimes)
+    ordered_links = order_links_by_phase(regulation_pseudotimes)
     return ordered_links, regulation_pseudotimes
 
 
 # ---------------------------------------------------------------------------
-# Class 1: cell-state fate frequencies and extrema / termination pseudotimes
+# Class 1: cell-state frequencies and extrema / termination pseudotimes
 # ---------------------------------------------------------------------------
 
-class FateFrequency:
+class StateFrequency:
     """Cell-state composition over pseudotime for one or more fate branches.
 
     Builds the per-window cell-state count table, maps windows to pseudotime,
     and provides fate-frequency plots plus extrema / "termination" pseudotimes that
-    define the wave-switch boundaries used by :class:`TFForceWaves`.
+    define the phase boundaries used by :class:`RegulatoryPhases`.
     """
 
     def __init__(
@@ -477,17 +490,19 @@ class FateFrequency:
 
 
 # ---------------------------------------------------------------------------
-# Class 2: TF forces over pseudotime and wave classification of links
+# Class 2: TF force waves over pseudotime (inspection + force selection)
 # ---------------------------------------------------------------------------
 
 class TFForceWaves:
-    """TF regulatory forces over pseudotime, with softmax-based wave assignment.
+    """TF regulatory force waves over pseudotime.
 
     Wraps :class:`SmoothedCurvesGRN` for one trajectory branch and exposes:
-    expression / regulation trajectory plots, force computation for a set of
-    links, the 3D single-link force landscape, the clustered force heatmap, the
-    softmax peak-pseudotime per link, and the wave classification that bins each
-    link by the cell-state termination pseudotimes from :class:`FateFrequency`.
+    expression / regulation trajectory plots, force-wave computation for a set of
+    links, the 3D single-link force landscape, and the clustered force heatmap.
+
+    Phase classification of links lives in :class:`RegulatoryPhases`; the nested
+    :class:`ForceSelector` picks per-link forces either lineage-specific or
+    combined across lineages.
     """
 
     def __init__(
@@ -517,11 +532,6 @@ class TFForceWaves:
         self.regulon_tf_expression = None
         self.force_curves = None
         self.dtime = None
-
-    # Retain softmax helpers as part of this class (delegate to module fns).
-    get_max_points = staticmethod(get_max_points)
-    aggregate_max_points = staticmethod(aggregate_max_points)
-    order_links_by_wave = staticmethod(order_links_by_wave)
 
     # ------------------------------------------------------------------
     # Expression / regulation trajectories
@@ -564,7 +574,7 @@ class TFForceWaves:
         return self._plot_gene_trajectories(dy, dx, genes, colors, ylabel, figsize)
 
     # ------------------------------------------------------------------
-    # Forces
+    # Force waves
     # ------------------------------------------------------------------
 
     def compute_forces(self, links, varname='w_in'):
@@ -623,230 +633,306 @@ class TFForceWaves:
         )
 
     # ------------------------------------------------------------------
-    # Softmax peak pseudotimes and wave classification
+    # Nested: pick lineage-specific or combined forces
     # ------------------------------------------------------------------
 
-    def link_peak_pseudotimes(self, links=None, top_k=5, temperature=1.0,
-                              method='weighted_mean'):
+    class ForceSelector:
+        """Pick per-link TF forces, lineage-specific or combined across lineages.
+
+        A single TF-Target *force wave* exists on each lineage branch. Given one
+        or more fitted :class:`TFForceWaves` branches, this returns, per link,
+        either the force on one lineage (``mode='lineage'``) or the combined
+        force across lineages (``mode='combined'`` -- the stronger lineage, i.e.
+        ``max`` of ``max_t |force|`` taken over branches). Links already present
+        in a branch's cached ``force_curves`` reuse them; others are scored on
+        demand via the same GRN.
+        """
+
+        def __init__(self, waves_by_branch, varname='w_in'):
+            """
+            Parameters
+            ----------
+            waves_by_branch : TFForceWaves or dict {name: TFForceWaves}
+                A single fitted branch, or a mapping of lineage name -> branch
+                (e.g. ``{'PB': waves_pb, 'GC': waves_gc}``). The branches are
+                assumed to share the same dictys universe.
+            varname : str
+                Network variable used for on-demand force curves. Default ``'w_in'``.
+            """
+            if isinstance(waves_by_branch, TFForceWaves):
+                waves_by_branch = {'lineage': waves_by_branch}
+            if not waves_by_branch:
+                raise ValueError("ForceSelector needs at least one branch.")
+            self.waves_by_branch = dict(waves_by_branch)
+            self.varname = varname
+
+        @property
+        def branches(self):
+            return list(self.waves_by_branch)
+
+        def any_waves(self):
+            """The first branch (its dictys universe is shared across branches)."""
+            return next(iter(self.waves_by_branch.values()))
+
+        def _branch_force_curves(self, waves, links):
+            """``(force_curves, dtime)`` for ``links`` on one branch.
+
+            Reuses ``waves.force_curves`` when it already holds all ``links``;
+            otherwise scores them on demand via the GRN (without mutating
+            ``waves``).
+            """
+            links = [tuple(l) for l in links]
+            cached = waves.force_curves
+            if cached is not None and all(l in cached.index for l in links):
+                return cached.loc[links], waves.dtime
+            beta_curves, dtime = waves.curves.get_beta_curves(links, varname=self.varname)
+            tf_expression, _ = waves.curves.get_smoothed_curves(mode='tf_expression')
+            regulon_tf_expression = tf_expression.loc[
+                beta_curves.index.get_level_values(0).unique()
+            ]
+            force_curves = SmoothedCurvesGRN.calculate_force_curves(
+                beta_curves, regulon_tf_expression
+            )
+            return force_curves, dtime
+
+        @staticmethod
+        def abs_max(force_curves, links=None):
+            """``max_t |force(t)|`` per link as a dict {(TF, Target): float}."""
+            idx = force_curves.index if links is None else links
+            return {l: float(force_curves.loc[l].abs().max())
+                    for l in idx if l in force_curves.index}
+
+        def force_curves(self, links, branch=None):
+            """``(force_curves, dtime)`` for ``links`` on one lineage (default: first)."""
+            name = branch or self.branches[0]
+            return self._branch_force_curves(self.waves_by_branch[name], links)
+
+        def branch_abs_max_force(self, links):
+            """Per-branch abs-max force: ``{branch: {link: force}}``."""
+            return {name: self.abs_max(self._branch_force_curves(w, links)[0], links)
+                    for name, w in self.waves_by_branch.items()}
+
+        def abs_max_force(self, links, mode='lineage', branch=None):
+            """Per-link abs-max force.
+
+            ``mode='lineage'`` -> force on ``branch`` (default: the first branch).
+            ``mode='combined'`` -> ``max`` across branches per link (the lineage
+            where the link is strongest).
+            """
+            if mode == 'lineage':
+                fc, _ = self.force_curves(links, branch=branch)
+                return self.abs_max(fc, [tuple(l) for l in links])
+            if mode == 'combined':
+                return {l: d['abs_max_force']
+                        for l, d in self.combined_abs_max_force(links).items()}
+            raise ValueError("mode must be 'lineage' or 'combined'.")
+
+        def combined_abs_max_force(self, links):
+            """Per-link combined force together with the winning lineage.
+
+            Returns ``{link: {'abs_max_force': float, 'branch': name}}`` where
+            ``branch`` is the lineage on which the link's ``max_t |force|`` is
+            largest (ties go to the first branch).
+            """
+            out = {}
+            for name, am in self.branch_abs_max_force(links).items():
+                for l, v in am.items():
+                    if l not in out or v > out[l]['abs_max_force']:
+                        out[l] = {'abs_max_force': v, 'branch': name}
+            return out
+
+
+# ---------------------------------------------------------------------------
+# Class 3: classification of links into regulatory phases
+# ---------------------------------------------------------------------------
+
+class RegulatoryPhases:
+    """Classify regulatory links into temporal *phases*.
+
+    A phase is a cluster of links whose force-wave peaks fall in the same
+    interval of pseudotime, the intervals being delimited by cell-state
+    termination pseudotimes (from :class:`StateFrequency`). Each link's peak
+    pseudotime is the softmax-weighted peak of its force wave; binning those
+    peaks against the termination pseudotimes assigns a phase (3 phases for PB,
+    2 for GC).
+    """
+
+    def __init__(self, waves, top_k=5, temperature=1.0, method='weighted_mean'):
+        """
+        Parameters
+        ----------
+        waves : TFForceWaves
+            Fitted branch whose ``compute_forces(links)`` has been called so
+            ``force_curves`` / ``dtime`` hold the force waves to classify.
+        top_k, temperature, method :
+            Softmax peak-pseudotime parameters (passed to the module helpers).
+        """
+        self.waves = waves
+        self.top_k = top_k
+        self.temperature = temperature
+        self.method = method
+
+    @staticmethod
+    def assign_phases(force_curves, dtime, switch_pseudotimes,
+                      top_k=5, temperature=1.0, method='weighted_mean'):
+        """Bin every link in ``force_curves`` to a phase by its softmax peak.
+
+        ``switch_pseudotimes`` are the cell-state termination pseudotimes that
+        separate consecutive phases; ``N`` switches -> ``N+1`` phases (1-indexed).
+        Returns ``{(TF, Target): phase}``.
+        """
+        boundaries = np.sort(np.asarray(switch_pseudotimes, dtype=float))
+        reg_pt = aggregate_max_points(
+            get_max_points(force_curves, dtime, top_k=top_k, temperature=temperature),
+            method=method,
+        )
+        return {
+            link: int(np.digitize(info['pseudotime'], boundaries, right=True)) + 1
+            for link, info in reg_pt.items()
+        }
+
+    def link_peak_pseudotimes(self, links=None):
         """Softmax peak pseudotime per link.
 
         Returns the ``aggregate_max_points`` dict
         ``{(TF, Target): {'pseudotime': float, ...}}`` for ``links``
-        (default: every link in ``force_curves``).
+        (default: every link in ``waves.force_curves``).
         """
-        self._require_forces()
-        df = self.force_curves if links is None else self.force_curves.loc[links]
-        max_points = get_max_points(df, self.dtime, top_k=top_k, temperature=temperature)
-        return aggregate_max_points(max_points, method=method)
+        if self.waves.force_curves is None:
+            raise RuntimeError("Call waves.compute_forces(links) first.")
+        df = (self.waves.force_curves if links is None
+              else self.waves.force_curves.loc[links])
+        max_points = get_max_points(df, self.waves.dtime,
+                                    top_k=self.top_k, temperature=self.temperature)
+        return aggregate_max_points(max_points, method=self.method)
 
-    def classify_waves(self, switch_pseudotimes, links=None, top_k=5,
-                       temperature=1.0, method='weighted_mean'):
-        """Assign each link to a wave by its softmax peak pseudotime.
+    def classify_phases(self, switch_pseudotimes, links=None):
+        """Assign each link to a phase by its softmax peak pseudotime.
 
         ``switch_pseudotimes`` is the ordered list of cell-state termination
-        pseudotimes that separate consecutive waves. ``N`` switches produce
-        ``N + 1`` waves (1-indexed): a link with peak pseudotime ``p`` lands in
-        wave ``k`` where ``switch[k-2] < p <= switch[k-1]``. So PB uses
-        ``[ActB-4_termination, earlyPB_termination]`` (3 waves) and GC uses
-        ``[ActB-3_termination]`` (2 waves).
+        pseudotimes that separate consecutive phases. ``N`` switches produce
+        ``N + 1`` phases (1-indexed): a link with peak pseudotime ``p`` lands in
+        phase ``k`` where ``switch[k-2] < p <= switch[k-1]``. So PB uses
+        ``[ActB-4_termination, earlyPB_termination]`` (3 phases) and GC uses
+        ``[ActB-3_termination]`` (2 phases).
 
         Returns
         -------
-        pandas.DataFrame with columns ``TF, Target, peak_pseudotime, wave``,
-        sorted by wave then peak pseudotime.
+        pandas.DataFrame with columns ``TF, Target, peak_pseudotime, phase``,
+        sorted by phase then peak pseudotime.
         """
         boundaries = np.sort(np.asarray(switch_pseudotimes, dtype=float))
-        reg_pt = self.link_peak_pseudotimes(
-            links=links, top_k=top_k, temperature=temperature, method=method
-        )
+        reg_pt = self.link_peak_pseudotimes(links=links)
 
         rows = []
         for (tf, target), info in reg_pt.items():
             peak = info['pseudotime']
-            wave = int(np.digitize(peak, boundaries, right=True)) + 1
+            phase = int(np.digitize(peak, boundaries, right=True)) + 1
             rows.append({'TF': tf, 'Target': target,
-                         'peak_pseudotime': peak, 'wave': wave})
+                         'peak_pseudotime': peak, 'phase': phase})
 
         return (
             pd.DataFrame(rows)
-            .sort_values(['wave', 'peak_pseudotime'])
+            .sort_values(['phase', 'peak_pseudotime'])
             .reset_index(drop=True)
         )
 
-    def classify_waves_from_states(self, fate_frequency, window_indices,
-                                  boundary_states, links=None,
-                                  termination_method='threshold', threshold_frac=0.1,
-                                  prominence=10, distance=3, **softmax_kwargs):
-        """Wave classification driven directly by cell-state termination pseudotimes.
+    def classify_phases_from_states(self, state_frequency, window_indices,
+                                    boundary_states, links=None,
+                                    termination_method='threshold', threshold_frac=0.1,
+                                    prominence=10, distance=3):
+        """Phase classification driven directly by cell-state termination pseudotimes.
 
-        Computes the termination pseudotime of each state in ``boundary_states`` (in
-        order) from a :class:`FateFrequency` instance, then bins links via
-        :meth:`classify_waves`.
+        Computes the termination pseudotime of each state in ``boundary_states``
+        (in order) from a :class:`StateFrequency` instance, then bins links via
+        :meth:`classify_phases`.
 
         Example
         -------
-        PB (3 waves)::
+        PB (3 phases)::
 
-            waves.classify_waves_from_states(
-                ff, PB_post_bifurcation_window_indices,
+            phases.classify_phases_from_states(
+                sf, PB_post_bifurcation_window_indices,
                 boundary_states=['ActB-4', 'earlyPB'])
 
-        GC (2 waves)::
+        GC (2 phases)::
 
-            waves.classify_waves_from_states(
-                ff, GC_post_bifurcation_window_indices,
+            phases.classify_phases_from_states(
+                sf, GC_post_bifurcation_window_indices,
                 boundary_states=['ActB-3'])
         """
         switch_pseudotimes = [
-            fate_frequency.termination_pseudotime(
+            state_frequency.termination_pseudotime(
                 state, window_indices,
                 method=termination_method, threshold_frac=threshold_frac,
                 prominence=prominence, distance=distance,
             )
             for state in boundary_states
         ]
-        return self.classify_waves(switch_pseudotimes, links=links, **softmax_kwargs)
+        return self.classify_phases(switch_pseudotimes, links=links)
 
 
 # ---------------------------------------------------------------------------
-# Class 3: validation of wave-clustered links vs random links (skeleton)
+# Class 4: validation of enriched links vs random links
 # ---------------------------------------------------------------------------
 
-class WaveValidation:
-    """Validate enriched (FireFate) links against random links, per wave.
+class TFForceValidation:
+    """Validate enriched (FireFate) links against size-matched random links by
+    abs-max TF force, pooled across the whole trajectory (no phase structure).
 
-    For each wave, the enriched links assigned to it are compared against a
-    size-matched set of random links that fall in the *same* wave. Random links
-    are drawn so that neither their TF nor their target is one of the enriched
-    TFs/targets ("non-enriched" links). The comparison metric is the absolute
-    maximum TF force along the trajectory (``max_t |force(t)|``), one value per
-    link, rendered as a box plot with one group of boxes per wave.
+    The comparison metric is the absolute maximum TF force along the trajectory
+    (``max_t |force(t)|``), one value per link. Forces are picked through a
+    :class:`TFForceWaves.ForceSelector`, so the comparison can be run on a single
+    lineage (``mode='lineage'``) or combined across lineages (``mode='combined'``):
 
-    Random links get their own forces (computed via the same GRN, without
-    mutating ``waves``) and are binned into waves with the same softmax
-    peak-pseudotime rule and switch boundaries as the enriched links.
+    * ``'lineage'`` -- enriched and random links are both scored on one branch.
+    * ``'combined'`` -- each enriched link is scored on its strongest lineage
+      (``max`` across branches), while the random null is the *union* of the
+      per-branch random forces (every random link contributes its single-branch
+      force on each branch, not a cross-branch max). In this mode the result
+      carries a ``branch`` column naming the winning lineage per enriched link.
+
+    :class:`PhaseValidation` extends this to split the comparison by phase.
     """
 
-    def __init__(self, waves, enriched_links, switch_pseudotimes,
-                 varname='w_in', top_k=5, temperature=1.0, method='weighted_mean'):
+    def __init__(self, waves, enriched_links, varname='w_in', mode='lineage'):
         """
         Parameters
         ----------
-        waves : TFForceWaves
-            Fitted instance. ``waves.compute_forces(enriched_links)`` must have
-            been called so ``waves.force_curves`` / ``waves.dtime`` hold the
-            enriched-link forces; ``waves.curves`` is reused to compute random-
-            link forces.
+        waves : TFForceWaves, dict {name: TFForceWaves}, or TFForceWaves.ForceSelector
+            The fitted branch(es) supplying forces. A single branch (or dict with
+            one entry) supports ``mode='lineage'``; pass multiple branches for
+            ``mode='combined'``. ``compute_forces(enriched_links)`` should have
+            been called on each branch so the enriched forces are cached (random
+            links are scored on demand).
         enriched_links : list of (TF, Target)
             The enriched / prioritized links (e.g. ``PB_links_plotting``).
-        switch_pseudotimes : sequence of float
-            Wave-switch boundaries (the same termination pseudotimes passed to
-            :meth:`TFForceWaves.classify_waves`). ``N`` switches -> ``N+1`` waves.
         varname : str
             Network variable used for random-link forces (matches the enriched
             ``compute_forces`` call). Default ``'w_in'``.
-        top_k, temperature, method :
-            Softmax peak-pseudotime parameters (passed to the module helpers),
-            kept identical to the enriched wave assignment for a fair comparison.
+        mode : {'lineage', 'combined'}
+            See the class docstring.
         """
-        self.waves = waves
+        self.selector = (waves if isinstance(waves, TFForceWaves.ForceSelector)
+                         else TFForceWaves.ForceSelector(waves, varname=varname))
         self.enriched_links = [tuple(l) for l in enriched_links]
-        self.switch_pseudotimes = np.sort(np.asarray(switch_pseudotimes, dtype=float))
         self.varname = varname
-        self.softmax_kwargs = dict(top_k=top_k, temperature=temperature, method=method)
+        self.mode = mode
         self.result_ = None      # tidy DataFrame after run()
 
     # ------------------------------------------------------------------
-    # internals
+    # random-pool helpers (shared by all validators)
     # ------------------------------------------------------------------
 
-    def _abs_max_force(self, force_curves, links):
-        """``max_t |force(t)|`` per link as a dict {(TF, Target): float}."""
-        return {link: float(force_curves.loc[link].abs().max()) for link in links}
+    def _build_random_pool(self, n_tf, n_target, exclude, rng):
+        """Sample a pool of non-enriched random links (``n_tf`` x ``n_target``).
 
-    def _assign_waves(self, force_curves, dtime):
-        """Bin every link in ``force_curves`` to a wave (same rule as classify_waves)."""
-        reg_pt = aggregate_max_points(
-            get_max_points(force_curves, dtime,
-                           top_k=self.softmax_kwargs['top_k'],
-                           temperature=self.softmax_kwargs['temperature']),
-            method=self.softmax_kwargs['method'],
-        )
-        return {
-            link: int(np.digitize(info['pseudotime'], self.switch_pseudotimes, right=True)) + 1
-            for link, info in reg_pt.items()
-        }
-
-    def _force_curves_for(self, links):
-        """Force curves for arbitrary ``links`` via the GRN, without touching ``waves``."""
-        curves = self.waves.curves
-        beta_curves, dtime = curves.get_beta_curves(links, varname=self.varname)
-        tf_expression, _ = curves.get_smoothed_curves(mode='tf_expression')
-        regulon_tf_expression = tf_expression.loc[
-            beta_curves.index.get_level_values(0).unique()
-        ]
-        force_curves = SmoothedCurvesGRN.calculate_force_curves(
-            beta_curves, regulon_tf_expression
-        )
-        return force_curves, dtime
-
-    # ------------------------------------------------------------------
-    # public API
-    # ------------------------------------------------------------------
-
-    def run(self, n_tf=None, n_target=None, exclude='tf_and_target', random_state=0):
-        """Build the per-wave enriched-vs-random comparison table.
-
-        A pool of ``n_tf`` x ``n_target`` random non-enriched links is scored and
-        binned into waves; within each wave a random subset is drawn to match the
-        number of enriched links in that wave.
-
-        Parameters
-        ----------
-        n_tf, n_target : int, optional
-            Size of the random candidate pool (``n_tf`` x ``n_target`` links).
-            When left as ``None`` (default), they are taken from the enriched set
-            itself -- ``n_tf`` = number of unique enriched TFs and ``n_target`` =
-            number of unique enriched targets -- so the random pool mirrors the
-            shape of the enriched links it is compared against rather than using a
-            hardcoded size.
-        exclude : str
-            How the random pool is kept "non-enriched":
-
-            * ``'tf_and_target'`` (default): drop *every* enriched TF and *every*
-              enriched target from the sampling universe, so no random link shares
-              even a single TF or target with the enriched set.
-            * ``'links'``: keep the full TF/target universe and only remove the
-              exact enriched ``(TF, Target)`` pairs, so a random link may reuse one
-              of your TFs or targets as long as that specific pair is not enriched.
-        random_state : int
-            Seed for reproducible sampling.
-
-        Returns
-        -------
-        pandas.DataFrame with columns ``link, wave, group, abs_max_force`` where
-        ``group`` is ``'enriched'`` or ``'random'``. Also stored on ``self.result_``.
+        ``n_tf`` / ``n_target`` default (when ``None``) to the number of unique
+        enriched TFs / targets, so the pool mirrors the shape of the enriched set.
+        ``exclude`` selects the null (see :meth:`run`). Returns the list of
+        ``(TF, Target)`` pool links.
         """
-        rng = np.random.default_rng(random_state)
-        d = self.waves.dictys_dynamic_object
-
-        # --- enriched: waves + abs max force (from already-computed forces) ---
-        enr_fc = self.waves.force_curves
-        if enr_fc is None:
-            raise RuntimeError(
-                "waves.force_curves is empty -- call "
-                "waves.compute_forces(enriched_links) before validating."
-            )
-        present = [l for l in self.enriched_links if l in enr_fc.index]
-        missing = [l for l in self.enriched_links if l not in enr_fc.index]
-        if missing:
-            print(f"WaveValidation: {len(missing)} enriched links absent from "
-                  f"force_curves, skipped: {missing}")
-        enr_waves = self._assign_waves(enr_fc.loc[present], self.waves.dtime)
-        enr_force = self._abs_max_force(enr_fc, present)
-        n_per_wave = Counter(enr_waves.values())
-
-        # --- random pool of non-enriched links (exclusion mode set by `exclude`) ---
+        d = self.selector.any_waves().dictys_dynamic_object
         nname = np.asarray(d.nname)
         tf_universe = nname[np.asarray(d.nids[0])]
         target_universe = nname[np.asarray(d.nids[1])]
@@ -873,91 +959,117 @@ class WaveValidation:
         pick_targets = rng.choice(cand_targets, size=min(n_target, len(cand_targets)),
                                   replace=False)
         # drop exact enriched pairs (a no-op under 'tf_and_target', essential under 'links')
-        pool_links = [(tf, tg) for tf in pick_tfs for tg in pick_targets
-                      if (tf, tg) not in enriched_set]
+        return [(tf, tg) for tf in pick_tfs for tg in pick_targets
+                if (tf, tg) not in enriched_set]
 
-        rnd_fc, rnd_dtime = self._force_curves_for(pool_links)
-        rnd_waves = self._assign_waves(rnd_fc, rnd_dtime)
-        rnd_force = self._abs_max_force(rnd_fc, list(rnd_fc.index))
+    def _enriched_forces(self):
+        """``(present_links, {link: abs_max_force}, {link: branch})`` for the
+        enriched links.
 
-        pool_by_wave = defaultdict(list)
-        for link, w in rnd_waves.items():
-            pool_by_wave[w].append(link)
+        Forces are picked via the selector under ``self.mode`` (cached enriched
+        forces reused per branch). ``branch`` is the winning lineage under
+        ``mode='combined'`` and the single scored lineage under ``'lineage'``.
+        """
+        if self.mode == 'combined':
+            combined = self.selector.combined_abs_max_force(self.enriched_links)
+            enr_force = {l: d['abs_max_force'] for l, d in combined.items()}
+            enr_branch = {l: d['branch'] for l, d in combined.items()}
+        else:
+            branch = self.selector.branches[0]
+            enr_force = self.selector.abs_max_force(
+                self.enriched_links, mode='lineage', branch=branch)
+            enr_branch = {l: branch for l in enr_force}
 
-        # --- assemble tidy table (size-matched random per wave) ---
-        rows = [{'link': link, 'wave': w, 'group': 'enriched',
-                 'abs_max_force': enr_force[link]}
-                for link, w in enr_waves.items()]
+        present = [l for l in self.enriched_links if l in enr_force]
+        missing = [l for l in self.enriched_links if l not in enr_force]
+        if missing:
+            print(f"{type(self).__name__}: {len(missing)} enriched links absent from "
+                  f"force curves, skipped: {missing}")
+        return present, enr_force, enr_branch
 
-        for w, n in n_per_wave.items():
-            cands = pool_by_wave.get(w, [])
-            if len(cands) < n:
-                print(f"WaveValidation: wave {w} has only {len(cands)} random links "
-                      f"in the pool (< {n} enriched); using all. Increase n_tf/n_target.")
-            chosen_idx = rng.choice(len(cands), size=min(n, len(cands)), replace=False) \
-                if cands else []
-            for i in chosen_idx:
-                link = cands[i]
-                rows.append({'link': link, 'wave': w, 'group': 'random',
-                             'abs_max_force': rnd_force[link]})
+    def _random_null_rows(self, pool_links):
+        """Random-null rows for ``pool_links``.
+
+        Under ``mode='combined'`` every random link contributes its single-branch
+        force on each branch (the per-branch union), each tagged with the
+        ``branch`` it was scored on; under ``'lineage'`` it contributes one force
+        on the chosen branch (no ``branch`` column).
+        """
+        if self.mode == 'combined':
+            return [{'link': l, 'group': 'random', 'branch': name, 'abs_max_force': f}
+                    for name, am in self.selector.branch_abs_max_force(pool_links).items()
+                    for l, f in am.items()]
+        return [{'link': l, 'group': 'random', 'abs_max_force': f}
+                for l, f in self.selector.abs_max_force(pool_links, mode='lineage').items()]
+
+    # ------------------------------------------------------------------
+    # public API (pooled, no phases)
+    # ------------------------------------------------------------------
+
+    def run(self, n_tf=None, n_target=None, exclude='tf_and_target', random_state=0):
+        """Pooled enriched-vs-random table across the whole trajectory.
+
+        A pool of ``n_tf`` x ``n_target`` non-enriched random links is scored; a
+        size-matched subset (one random draw per enriched link) is kept as the
+        null.
+
+        Parameters
+        ----------
+        n_tf, n_target : int, optional
+            Size of the random candidate pool. ``None`` (default) -> number of
+            unique enriched TFs / targets, mirroring the enriched set's shape.
+        exclude : {'tf_and_target', 'links'}
+            How the random pool is kept "non-enriched":
+
+            * ``'tf_and_target'`` (default): drop *every* enriched TF and *every*
+              enriched target from the sampling universe.
+            * ``'links'``: keep the full universe and only remove the exact
+              enriched ``(TF, Target)`` pairs.
+        random_state : int
+            Seed for reproducible sampling.
+
+        Returns
+        -------
+        pandas.DataFrame with columns ``link, group, abs_max_force`` (``group`` is
+        ``'enriched'`` or ``'random'``). Under ``mode='combined'`` an extra
+        ``branch`` column records the winning lineage for enriched rows and the
+        lineage each random link was scored on. Also stored on ``self.result_``.
+        """
+        rng = np.random.default_rng(random_state)
+        present, enr_force, enr_branch = self._enriched_forces()
+
+        pool_links = self._build_random_pool(n_tf, n_target, exclude, rng)
+        null_rows = self._random_null_rows(pool_links)
+
+        n = len(present)
+        if len(null_rows) < n:
+            print(f"{type(self).__name__}: random null has only {len(null_rows)} "
+                  f"links (< {n} enriched); using all. Increase n_tf/n_target.")
+        idx = (rng.choice(len(null_rows), size=min(n, len(null_rows)), replace=False)
+               if null_rows else [])
+
+        if self.mode == 'combined':
+            rows = [{'link': l, 'group': 'enriched', 'branch': enr_branch[l],
+                     'abs_max_force': enr_force[l]} for l in present]
+        else:
+            rows = [{'link': l, 'group': 'enriched', 'abs_max_force': enr_force[l]}
+                    for l in present]
+        rows += [null_rows[i] for i in idx]
 
         self.result_ = (
-            pd.DataFrame(rows)
-            .sort_values(['wave', 'group'])
-            .reset_index(drop=True)
-        )
+            pd.DataFrame(rows).sort_values('group').reset_index(drop=True))
         return self.result_
 
-    def plot(self, figsize=(8, 6), ylabel='Abs max TF force',
+    def plot(self, figsize=(5, 6), ylabel='Abs max TF force',
              colors=('#d1495b', '#9aa0a6')):
-        """Box plot of abs-max TF force, enriched vs random, grouped by wave."""
+        """Pooled box plot of abs-max TF force, enriched vs random."""
         if self.result_ is None:
             self.run()
-        df = self.result_
-        waves_sorted = sorted(df['wave'].unique())
-        groups = [('enriched', 'Enriched (FireFate)'),
-                  ('random', 'Random (non-enriched)')]
-        width = 0.35
+        return self._plot_pooled(self.result_, figsize, ylabel, colors)
 
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-
-        for gi, (g, _label) in enumerate(groups):
-            offset = (gi - 0.5) * width
-            positions, data = [], []
-            for wi, w in enumerate(waves_sorted):
-                vals = df[(df['wave'] == w) & (df['group'] == g)]['abs_max_force'].values
-                positions.append(wi + offset)
-                data.append(vals)
-            bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
-                            patch_artist=True, showfliers=False,
-                            medianprops=dict(color='black'))
-            for patch in bp['boxes']:
-                patch.set_facecolor(colors[gi])
-                patch.set_alpha(0.6)
-            # one jittered point per link
-            for pos, vals in zip(positions, data):
-                if len(vals) == 0:
-                    continue
-                x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
-                ax.scatter(x, vals, color=colors[gi], edgecolor='black',
-                           linewidth=0.4, s=22, zorder=3)
-
-        ax.set_xticks(range(len(waves_sorted)))
-        ax.set_xticklabels([f'Wave {w}' for w in waves_sorted])
-        ax.set_ylabel(ylabel)
-        handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
-                   for gi in range(len(groups))]
-        ax.legend(handles, [label for _, label in groups], frameon=False)
-        return fig, ax
-
-    def plot_overall(self, figsize=(5, 6), ylabel='Abs max TF force',
-                     colors=('#d1495b', '#9aa0a6')):
-        """Box plot of abs-max TF force, enriched vs random, pooled across all waves."""
-        if self.result_ is None:
-            self.run()
-        df = self.result_
+    @staticmethod
+    def _plot_pooled(df, figsize, ylabel, colors):
+        """Two-box (enriched vs random) plot of ``abs_max_force`` from a tidy table."""
         groups = [('enriched', 'Enriched (FireFate)'),
                   ('random', 'Random (non-enriched)')]
 
@@ -981,3 +1093,173 @@ class WaveValidation:
         ax.set_xticklabels([label for _, label in groups])
         ax.set_ylabel(ylabel)
         return fig, ax
+
+
+class PhaseValidation(TFForceValidation):
+    """Per-phase enriched-vs-random comparison (adds regulatory phases to
+    :class:`TFForceValidation`).
+
+    For each phase, the enriched links assigned to it are compared against a
+    size-matched set of random links that fall in the *same* phase. Random links
+    are drawn so that neither their TF nor their target is one of the enriched
+    TFs/targets ("non-enriched" links), get their own force waves (computed via
+    the same GRN, without mutating the branch) and are binned into phases with
+    the same softmax peak-pseudotime rule and switch boundaries as the enriched
+    links (via :meth:`RegulatoryPhases.assign_phases`). The result is a box plot
+    with one group of boxes per phase. This per-phase split runs on a single
+    lineage (``mode='lineage'``).
+    """
+
+    def __init__(self, waves, enriched_links, switch_pseudotimes,
+                 varname='w_in', top_k=5, temperature=1.0, method='weighted_mean'):
+        """
+        Parameters
+        ----------
+        waves, enriched_links, varname :
+            See :class:`TFForceValidation` (single lineage).
+        switch_pseudotimes : sequence of float
+            Phase boundaries (the same termination pseudotimes passed to
+            :meth:`RegulatoryPhases.classify_phases`). ``N`` switches -> ``N+1``
+            phases.
+        top_k, temperature, method :
+            Softmax peak-pseudotime parameters (passed to the module helpers),
+            kept identical to the enriched phase assignment for a fair comparison.
+        """
+        super().__init__(waves, enriched_links, varname=varname, mode='lineage')
+        self.switch_pseudotimes = np.sort(np.asarray(switch_pseudotimes, dtype=float))
+        self.softmax_kwargs = dict(top_k=top_k, temperature=temperature, method=method)
+
+    def _assign_phases(self, force_curves, dtime):
+        """Bin every link in ``force_curves`` to a phase (same rule as RegulatoryPhases)."""
+        return RegulatoryPhases.assign_phases(
+            force_curves, dtime, self.switch_pseudotimes, **self.softmax_kwargs)
+
+    # ------------------------------------------------------------------
+    # public API (per phase)
+    # ------------------------------------------------------------------
+
+    def run(self, n_tf=None, n_target=None, exclude='tf_and_target', random_state=0):
+        """Build the per-phase enriched-vs-random comparison table.
+
+        A pool of ``n_tf`` x ``n_target`` random non-enriched links is scored and
+        binned into phases; within each phase a random subset is drawn to match
+        the number of enriched links in that phase.
+
+        Parameters
+        ----------
+        n_tf, n_target : int, optional
+            Size of the random candidate pool (``n_tf`` x ``n_target`` links).
+            When left as ``None`` (default), they are taken from the enriched set
+            itself -- ``n_tf`` = number of unique enriched TFs and ``n_target`` =
+            number of unique enriched targets -- so the random pool mirrors the
+            shape of the enriched links it is compared against rather than using a
+            hardcoded size.
+        exclude : str
+            How the random pool is kept "non-enriched":
+
+            * ``'tf_and_target'`` (default): drop *every* enriched TF and *every*
+              enriched target from the sampling universe, so no random link shares
+              even a single TF or target with the enriched set.
+            * ``'links'``: keep the full TF/target universe and only remove the
+              exact enriched ``(TF, Target)`` pairs, so a random link may reuse one
+              of your TFs or targets as long as that specific pair is not enriched.
+        random_state : int
+            Seed for reproducible sampling.
+
+        Returns
+        -------
+        pandas.DataFrame with columns ``link, phase, group, abs_max_force`` where
+        ``group`` is ``'enriched'`` or ``'random'``. Also stored on ``self.result_``.
+        """
+        rng = np.random.default_rng(random_state)
+
+        # --- enriched: phases + abs max force (forces picked via the selector) ---
+        present, enr_force, _ = self._enriched_forces()
+        enr_fc, enr_dtime = self.selector.force_curves(present)
+        enr_phases = self._assign_phases(enr_fc, enr_dtime)
+        n_per_phase = Counter(enr_phases.values())
+
+        # --- random pool of non-enriched links (exclusion mode set by `exclude`) ---
+        pool_links = self._build_random_pool(n_tf, n_target, exclude, rng)
+        rnd_fc, rnd_dtime = self.selector.force_curves(pool_links)
+        rnd_phases = self._assign_phases(rnd_fc, rnd_dtime)
+        rnd_force = self.selector.abs_max(rnd_fc)
+
+        pool_by_phase = defaultdict(list)
+        for link, p in rnd_phases.items():
+            pool_by_phase[p].append(link)
+
+        # --- assemble tidy table (size-matched random per phase) ---
+        rows = [{'link': link, 'phase': p, 'group': 'enriched',
+                 'abs_max_force': enr_force[link]}
+                for link, p in enr_phases.items()]
+
+        for p, n in n_per_phase.items():
+            cands = pool_by_phase.get(p, [])
+            if len(cands) < n:
+                print(f"PhaseValidation: phase {p} has only {len(cands)} random links "
+                      f"in the pool (< {n} enriched); using all. Increase n_tf/n_target.")
+            chosen_idx = rng.choice(len(cands), size=min(n, len(cands)), replace=False) \
+                if cands else []
+            for i in chosen_idx:
+                link = cands[i]
+                rows.append({'link': link, 'phase': p, 'group': 'random',
+                             'abs_max_force': rnd_force[link]})
+
+        self.result_ = (
+            pd.DataFrame(rows)
+            .sort_values(['phase', 'group'])
+            .reset_index(drop=True)
+        )
+        return self.result_
+
+    def plot(self, figsize=(8, 6), ylabel='Abs max TF force',
+             colors=('#d1495b', '#9aa0a6')):
+        """Box plot of abs-max TF force, enriched vs random, grouped by phase."""
+        if self.result_ is None:
+            self.run()
+        df = self.result_
+        phases_sorted = sorted(df['phase'].unique())
+        groups = [('enriched', 'Enriched (FireFate)'),
+                  ('random', 'Random (non-enriched)')]
+        width = 0.35
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        for gi, (g, _label) in enumerate(groups):
+            offset = (gi - 0.5) * width
+            positions, data = [], []
+            for pi, p in enumerate(phases_sorted):
+                vals = df[(df['phase'] == p) & (df['group'] == g)]['abs_max_force'].values
+                positions.append(pi + offset)
+                data.append(vals)
+            bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                            patch_artist=True, showfliers=False,
+                            medianprops=dict(color='black'))
+            for patch in bp['boxes']:
+                patch.set_facecolor(colors[gi])
+                patch.set_alpha(0.6)
+            # one jittered point per link
+            for pos, vals in zip(positions, data):
+                if len(vals) == 0:
+                    continue
+                x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+                ax.scatter(x, vals, color=colors[gi], edgecolor='black',
+                           linewidth=0.4, s=22, zorder=3)
+
+        ax.set_xticks(range(len(phases_sorted)))
+        ax.set_xticklabels([f'Phase {p}' for p in phases_sorted])
+        ax.set_ylabel(ylabel)
+        handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
+                   for gi in range(len(groups))]
+        ax.legend(handles, [label for _, label in groups], frameon=False)
+        return fig, ax
+
+    def plot_overall(self, figsize=(5, 6), ylabel='Abs max TF force',
+                     colors=('#d1495b', '#9aa0a6')):
+        """Box plot of abs-max TF force, enriched vs random, pooled across all phases."""
+        if self.result_ is None:
+            self.run()
+        return self._plot_pooled(self.result_, figsize, ylabel, colors)
