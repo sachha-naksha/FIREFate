@@ -892,7 +892,8 @@ class TFForceValidation:
       force on each branch, not a cross-branch max). In this mode the result
       carries a ``branch`` column naming the winning lineage per enriched link.
 
-    :class:`PhaseValidation` extends this to split the comparison by phase.
+    The nested :class:`PhaseSplitted` (via :meth:`split_by_phase`) reuses this
+    class to split the comparison by branch-qualified phase.
     """
 
     def __init__(self, waves, enriched_links, varname='w_in', mode='lineage'):
@@ -1094,172 +1095,200 @@ class TFForceValidation:
         ax.set_ylabel(ylabel)
         return fig, ax
 
-
-class PhaseValidation(TFForceValidation):
-    """Per-phase enriched-vs-random comparison (adds regulatory phases to
-    :class:`TFForceValidation`).
-
-    For each phase, the enriched links assigned to it are compared against a
-    size-matched set of random links that fall in the *same* phase. Random links
-    are drawn so that neither their TF nor their target is one of the enriched
-    TFs/targets ("non-enriched" links), get their own force waves (computed via
-    the same GRN, without mutating the branch) and are binned into phases with
-    the same softmax peak-pseudotime rule and switch boundaries as the enriched
-    links (via :meth:`RegulatoryPhases.assign_phases`). The result is a box plot
-    with one group of boxes per phase. This per-phase split runs on a single
-    lineage (``mode='lineage'``).
-    """
-
-    def __init__(self, waves, enriched_links, switch_pseudotimes,
-                 varname='w_in', top_k=5, temperature=1.0, method='weighted_mean'):
-        """
-        Parameters
-        ----------
-        waves, enriched_links, varname :
-            See :class:`TFForceValidation` (single lineage).
-        switch_pseudotimes : sequence of float
-            Phase boundaries (the same termination pseudotimes passed to
-            :meth:`RegulatoryPhases.classify_phases`). ``N`` switches -> ``N+1``
-            phases.
-        top_k, temperature, method :
-            Softmax peak-pseudotime parameters (passed to the module helpers),
-            kept identical to the enriched phase assignment for a fair comparison.
-        """
-        super().__init__(waves, enriched_links, varname=varname, mode='lineage')
-        self.switch_pseudotimes = np.sort(np.asarray(switch_pseudotimes, dtype=float))
-        self.softmax_kwargs = dict(top_k=top_k, temperature=temperature, method=method)
-
-    def _assign_phases(self, force_curves, dtime):
-        """Bin every link in ``force_curves`` to a phase (same rule as RegulatoryPhases)."""
-        return RegulatoryPhases.assign_phases(
-            force_curves, dtime, self.switch_pseudotimes, **self.softmax_kwargs)
-
     # ------------------------------------------------------------------
-    # public API (per phase)
+    # per-phase view: factory + nested validator
     # ------------------------------------------------------------------
 
-    def run(self, n_tf=None, n_target=None, exclude='tf_and_target', random_state=0):
-        """Build the per-phase enriched-vs-random comparison table.
+    def split_by_phase(self, switch_pseudotimes,
+                       top_k=5, temperature=1.0, method='weighted_mean'):
+        """Per-phase view of this validation (see :class:`PhaseSplitted`).
 
-        A pool of ``n_tf`` x ``n_target`` random non-enriched links is scored and
-        binned into phases; within each phase a random subset is drawn to match
-        the number of enriched links in that phase.
-
-        Parameters
-        ----------
-        n_tf, n_target : int, optional
-            Size of the random candidate pool (``n_tf`` x ``n_target`` links).
-            When left as ``None`` (default), they are taken from the enriched set
-            itself -- ``n_tf`` = number of unique enriched TFs and ``n_target`` =
-            number of unique enriched targets -- so the random pool mirrors the
-            shape of the enriched links it is compared against rather than using a
-            hardcoded size.
-        exclude : str
-            How the random pool is kept "non-enriched":
-
-            * ``'tf_and_target'`` (default): drop *every* enriched TF and *every*
-              enriched target from the sampling universe, so no random link shares
-              even a single TF or target with the enriched set.
-            * ``'links'``: keep the full TF/target universe and only remove the
-              exact enriched ``(TF, Target)`` pairs, so a random link may reuse one
-              of your TFs or targets as long as that specific pair is not enriched.
-        random_state : int
-            Seed for reproducible sampling.
-
-        Returns
-        -------
-        pandas.DataFrame with columns ``link, phase, group, abs_max_force`` where
-        ``group`` is ``'enriched'`` or ``'random'``. Also stored on ``self.result_``.
+        Reuses this instance's selector, enriched links and random-pool machinery;
+        only adds the phase binning. ``switch_pseudotimes`` is either one ordered
+        sequence (lineage mode -- applied to the single branch) or a
+        ``{branch: sequence}`` mapping (combined mode -- one set of phase
+        boundaries per lineage). ``top_k, temperature, method`` are the softmax
+        peak-pseudotime parameters, kept identical to the enriched assignment.
         """
-        rng = np.random.default_rng(random_state)
+        return TFForceValidation.PhaseSplitted(
+            self, switch_pseudotimes,
+            top_k=top_k, temperature=temperature, method=method)
 
-        # --- enriched: phases + abs max force (forces picked via the selector) ---
-        present, enr_force, _ = self._enriched_forces()
-        enr_fc, enr_dtime = self.selector.force_curves(present)
-        enr_phases = self._assign_phases(enr_fc, enr_dtime)
-        n_per_phase = Counter(enr_phases.values())
+    class PhaseSplitted:
+        """Per-phase enriched-vs-random comparison, nested inside (and built from)
+        a :class:`TFForceValidation` instance.
 
-        # --- random pool of non-enriched links (exclusion mode set by `exclude`) ---
-        pool_links = self._build_random_pool(n_tf, n_target, exclude, rng)
-        rnd_fc, rnd_dtime = self.selector.force_curves(pool_links)
-        rnd_phases = self._assign_phases(rnd_fc, rnd_dtime)
-        rnd_force = self.selector.abs_max(rnd_fc)
+        TF force is now an established validation metric, so this only *adds* the
+        phase split on top of the outer validator -- it reuses that instance's
+        force selector, enriched links and random-pool sampling by composition
+        (``self.v``) rather than duplicating them.
 
-        pool_by_phase = defaultdict(list)
-        for link, p in rnd_phases.items():
-            pool_by_phase[p].append(link)
+        Each enriched link is scored on its stronger lineage (``mode='combined'``)
+        or the single branch (``mode='lineage'``) -- exactly the force the outer
+        validator already picks -- and then binned into a *phase of that lineage*
+        by the softmax peak-pseudotime rule (:meth:`RegulatoryPhases.assign_phases`)
+        against that branch's cell-state termination pseudotimes. Phases are
+        therefore branch-qualified: a link appears only under its winning branch's
+        phase (e.g. PB 1-3, GC 1-2). Within each ``(branch, phase)`` cell a
+        size-matched set of random non-enriched links -- drawn through the outer
+        validator's :meth:`_build_random_pool`, scored and phase-binned on the same
+        branch -- forms the null.
+        """
 
-        # --- assemble tidy table (size-matched random per phase) ---
-        rows = [{'link': link, 'phase': p, 'group': 'enriched',
-                 'abs_max_force': enr_force[link]}
-                for link, p in enr_phases.items()]
+        def __init__(self, validation, switch_pseudotimes,
+                     top_k=5, temperature=1.0, method='weighted_mean'):
+            """
+            Parameters
+            ----------
+            validation : TFForceValidation
+                The outer (already-built) validator supplying the selector,
+                enriched links, mode and random-pool machinery.
+            switch_pseudotimes : sequence or dict {branch: sequence}
+                Phase boundaries. A single sequence is applied to the (single)
+                lineage branch; a mapping gives one set of boundaries per lineage
+                (combined mode). ``N`` boundaries -> ``N + 1`` phases.
+            top_k, temperature, method :
+                Softmax peak-pseudotime parameters, kept identical to the enriched
+                phase assignment for a fair comparison.
+            """
+            self.v = validation
+            self.switch_by_branch = self._normalize_switches(switch_pseudotimes)
+            self.softmax_kwargs = dict(top_k=top_k, temperature=temperature, method=method)
+            self.result_ = None
 
-        for p, n in n_per_phase.items():
-            cands = pool_by_phase.get(p, [])
-            if len(cands) < n:
-                print(f"PhaseValidation: phase {p} has only {len(cands)} random links "
-                      f"in the pool (< {n} enriched); using all. Increase n_tf/n_target.")
-            chosen_idx = rng.choice(len(cands), size=min(n, len(cands)), replace=False) \
-                if cands else []
-            for i in chosen_idx:
-                link = cands[i]
-                rows.append({'link': link, 'phase': p, 'group': 'random',
-                             'abs_max_force': rnd_force[link]})
+        def _normalize_switches(self, switch_pseudotimes):
+            """``{branch: sorted boundaries}``: accepts a per-branch mapping or a
+            single sequence (applied to the lineage's single branch)."""
+            if isinstance(switch_pseudotimes, dict):
+                return {b: np.sort(np.asarray(v, dtype=float))
+                        for b, v in switch_pseudotimes.items()}
+            branch = self.v.selector.branches[0]
+            return {branch: np.sort(np.asarray(switch_pseudotimes, dtype=float))}
 
-        self.result_ = (
-            pd.DataFrame(rows)
-            .sort_values(['phase', 'group'])
-            .reset_index(drop=True)
-        )
-        return self.result_
+        def _assign_phases(self, force_curves, dtime, branch):
+            """Bin every link in ``force_curves`` to a phase on ``branch`` (same
+            softmax rule and boundaries used for the enriched links)."""
+            return RegulatoryPhases.assign_phases(
+                force_curves, dtime, self.switch_by_branch[branch], **self.softmax_kwargs)
 
-    def plot(self, figsize=(8, 6), ylabel='Abs max TF force',
-             colors=('#d1495b', '#9aa0a6')):
-        """Box plot of abs-max TF force, enriched vs random, grouped by phase."""
-        if self.result_ is None:
-            self.run()
-        df = self.result_
-        phases_sorted = sorted(df['phase'].unique())
-        groups = [('enriched', 'Enriched (FireFate)'),
-                  ('random', 'Random (non-enriched)')]
-        width = 0.35
+        # ------------------------------------------------------------------
+        # public API (per branch-qualified phase)
+        # ------------------------------------------------------------------
 
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
+        def run(self, n_tf=None, n_target=None, exclude='tf_and_target', random_state=0):
+            """Build the per-(branch, phase) enriched-vs-random comparison table.
 
-        for gi, (g, _label) in enumerate(groups):
-            offset = (gi - 0.5) * width
-            positions, data = [], []
-            for pi, p in enumerate(phases_sorted):
-                vals = df[(df['phase'] == p) & (df['group'] == g)]['abs_max_force'].values
-                positions.append(pi + offset)
-                data.append(vals)
-            bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
-                            patch_artist=True, showfliers=False,
-                            medianprops=dict(color='black'))
-            for patch in bp['boxes']:
-                patch.set_facecolor(colors[gi])
-                patch.set_alpha(0.6)
-            # one jittered point per link
-            for pos, vals in zip(positions, data):
-                if len(vals) == 0:
-                    continue
-                x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
-                ax.scatter(x, vals, color=colors[gi], edgecolor='black',
-                           linewidth=0.4, s=22, zorder=3)
+            Each enriched link is placed under its winning branch's phase; a pool
+            of ``n_tf`` x ``n_target`` random non-enriched links (see
+            :meth:`TFForceValidation._build_random_pool`) is scored and
+            phase-binned on each branch, and within every ``(branch, phase)`` cell
+            a random subset is drawn to match the enriched count there.
 
-        ax.set_xticks(range(len(phases_sorted)))
-        ax.set_xticklabels([f'Phase {p}' for p in phases_sorted])
-        ax.set_ylabel(ylabel)
-        handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
-                   for gi in range(len(groups))]
-        ax.legend(handles, [label for _, label in groups], frameon=False)
-        return fig, ax
+            Parameters
+            ----------
+            n_tf, n_target, exclude, random_state :
+                See :meth:`TFForceValidation.run` (the same random-pool controls).
 
-    def plot_overall(self, figsize=(5, 6), ylabel='Abs max TF force',
-                     colors=('#d1495b', '#9aa0a6')):
-        """Box plot of abs-max TF force, enriched vs random, pooled across all phases."""
-        if self.result_ is None:
-            self.run()
-        return self._plot_pooled(self.result_, figsize, ylabel, colors)
+            Returns
+            -------
+            pandas.DataFrame with columns ``link, branch, phase, group,
+            abs_max_force`` (``group`` is ``'enriched'`` or ``'random'``). Also
+            stored on ``self.result_``.
+            """
+            rng = np.random.default_rng(random_state)
+            present, enr_force, enr_branch = self.v._enriched_forces()
+
+            # enriched links grouped by their (winning) lineage
+            enr_by_branch = defaultdict(list)
+            for link in present:
+                enr_by_branch[enr_branch[link]].append(link)
+
+            # one random pool, scored on each branch that carries enriched links
+            # (union null -- a random link keeps its own single-branch force)
+            pool_links = self.v._build_random_pool(n_tf, n_target, exclude, rng)
+
+            rows = []
+            n_per_cell = defaultdict(int)     # (branch, phase) -> # enriched links
+            for branch, links in enr_by_branch.items():
+                fc, dtime = self.v.selector.force_curves(links, branch=branch)
+                phases = self._assign_phases(fc, dtime, branch)
+                for link in links:
+                    p = phases[link]
+                    n_per_cell[(branch, p)] += 1
+                    rows.append({'link': link, 'branch': branch, 'phase': p,
+                                 'group': 'enriched', 'abs_max_force': enr_force[link]})
+
+            for branch in enr_by_branch:
+                fc, dtime = self.v.selector.force_curves(pool_links, branch=branch)
+                rnd_phases = self._assign_phases(fc, dtime, branch)
+                rnd_force = self.v.selector.abs_max(fc)
+                pool_by_phase = defaultdict(list)
+                for link, p in rnd_phases.items():
+                    pool_by_phase[p].append(link)
+                for (b, p), n in n_per_cell.items():
+                    if b != branch:
+                        continue
+                    cands = pool_by_phase.get(p, [])
+                    if len(cands) < n:
+                        print(f"PhaseSplitted: {branch} phase {p} has only "
+                              f"{len(cands)} random links in the pool (< {n} "
+                              f"enriched); using all. Increase n_tf/n_target.")
+                    chosen_idx = (rng.choice(len(cands), size=min(n, len(cands)),
+                                             replace=False) if cands else [])
+                    for i in chosen_idx:
+                        link = cands[i]
+                        rows.append({'link': link, 'branch': branch, 'phase': p,
+                                     'group': 'random', 'abs_max_force': rnd_force[link]})
+
+            self.result_ = (
+                pd.DataFrame(rows)
+                .sort_values(['branch', 'phase', 'group'])
+                .reset_index(drop=True)
+            )
+            return self.result_
+
+        def plot(self, figsize=(9, 6), ylabel='Abs max TF force',
+                 colors=('#d1495b', '#9aa0a6')):
+            """Box plot of abs-max TF force, enriched vs random, one group of boxes
+            per branch-qualified phase (e.g. ``PB-1 PB-2 PB-3 GC-1 GC-2``)."""
+            if self.result_ is None:
+                self.run()
+            df = self.result_
+            cells = sorted(set(zip(df['branch'], df['phase'])))
+            groups = [('enriched', 'Enriched (FireFate)'),
+                      ('random', 'Random (non-enriched)')]
+            width = 0.35
+
+            fig, ax = plt.subplots(figsize=figsize)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+
+            for gi, (g, _label) in enumerate(groups):
+                offset = (gi - 0.5) * width
+                positions, data = [], []
+                for ci, (branch, p) in enumerate(cells):
+                    vals = df[(df['branch'] == branch) & (df['phase'] == p)
+                              & (df['group'] == g)]['abs_max_force'].values
+                    positions.append(ci + offset)
+                    data.append(vals)
+                bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                                patch_artist=True, showfliers=False,
+                                medianprops=dict(color='black'))
+                for patch in bp['boxes']:
+                    patch.set_facecolor(colors[gi])
+                    patch.set_alpha(0.6)
+                # one jittered point per link
+                for pos, vals in zip(positions, data):
+                    if len(vals) == 0:
+                        continue
+                    x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+                    ax.scatter(x, vals, color=colors[gi], edgecolor='black',
+                               linewidth=0.4, s=22, zorder=3)
+
+            ax.set_xticks(range(len(cells)))
+            ax.set_xticklabels([f'{b}-{p}' for b, p in cells])
+            ax.set_ylabel(ylabel)
+            handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
+                       for gi in range(len(groups))]
+            ax.legend(handles, [label for _, label in groups], frameon=False)
+            return fig, ax
