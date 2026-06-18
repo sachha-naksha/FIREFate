@@ -1004,7 +1004,8 @@ class TFForceValidation:
                 for l, f in self.selector.abs_max_force(pool_links, mode='lineage').items()]
 
     # ------------------------------------------------------------------
-    # state-constrained random pool (sample links present in PB-2/GC-1 windows)
+    # present-edge random nulls (sample real edges, score force post hoc):
+    # state-constrained (PB-2/GC-1 windows) and true (whole w_in graph)
     # ------------------------------------------------------------------
 
     def _qualifying_windows(self, cell_labels, states, threshold, cluster_column):
@@ -1027,22 +1028,22 @@ class TFForceValidation:
                          out=np.zeros_like(n_total), where=n_total > 0)
         return np.where(comp > threshold)[0]
 
-    def _build_constrained_pool(self, cell_labels, states, threshold, cluster_column):
-        """Non-enriched links present in windows dominated by ``states``.
+    def _sample_present_links(self, windows, varname, n, rng):
+        """Sample ``n`` non-enriched links present in ``windows`` of the ``varname`` graph.
 
-        A link is "present" in a window if its direct-effect edge is nonzero there
-        (``prop['es']['w'] != 0`` -- the sparse fitted GRN, ~3% of pairs); edge
-        weight is otherwise irrelevant to sampling. The pool is the union of those
-        present edges across the qualifying windows (:meth:`_qualifying_windows`)
-        with every enriched TF and enriched target *node* removed (the
-        "not-of-nodes"). Returns the list of candidate ``(TF, Target)`` links.
+        A link is "present" if its ``prop['es'][varname]`` edge is nonzero in any
+        of ``windows`` (OR'd across them); edge weight is otherwise irrelevant to
+        sampling. Every enriched TF row and enriched target column is zeroed out
+        first (the "not-of-nodes"). ``n`` links are then drawn without replacement
+        from the surviving edges (sampled directly from the index arrays, so the
+        full candidate list is never materialised). Returns a list of sampled
+        ``(TF, Target)`` links.
         """
         d = self.selector.any_waves().dictys_dynamic_object
-        windows = self._qualifying_windows(cell_labels, states, threshold, cluster_column)
-        w = d.prop['es']['w']                       # (n_tf, n_target, n_window)
-        present = np.zeros(w.shape[:2], dtype=bool)
+        net = d.prop['es'][varname]                 # (n_tf, n_target, n_window)
+        present = np.zeros(net.shape[:2], dtype=bool)
         for win in windows:
-            present |= (np.asarray(w[:, :, win]) != 0)
+            present |= (np.asarray(net[:, :, win]) != 0)
 
         nname = np.asarray(d.nname)
         tf_names = nname[np.asarray(d.nids[0])]
@@ -1051,38 +1052,34 @@ class TFForceValidation:
         present[:, np.isin(target_names, list({tg for _, tg in self.enriched_links}))] = False
 
         ti, tj = np.where(present)
-        return list(zip(tf_names[ti], target_names[tj]))
+        if len(ti) < n:
+            print(f"{type(self).__name__}: candidate pool has only {len(ti)} links "
+                  f"(< {n} enriched); using all.")
+        sel = (rng.choice(len(ti), size=min(n, len(ti)), replace=False)
+               if len(ti) else [])
+        return [(tf_names[ti[k]], target_names[tj[k]]) for k in sel]
 
-    def run_constrained(self, cell_labels, states=('PB-2', 'GC-1'), threshold=0.5,
-                        cluster_column='Cluster', random_state=0):
-        """Pooled enriched-vs-random comparison with a *state-constrained* null.
+    def _combined_enriched(self):
+        """``(enr, present)``: cross-branch combined force per enriched link.
 
-        Unlike :meth:`run`, the random links are not a TF x target cross product
-        drawn from the whole universe: they are sampled from the links *present*
-        in windows whose combined composition of ``states`` exceeds ``threshold``
-        (see :meth:`_build_constrained_pool`), after removing every enriched TF
-        and target node. The link is sampled first; its TF force is computed post
-        hoc. Both enriched and random links are scored by abs-max TF force *across
-        all branches* (the stronger lineage per link) -- exactly how the enriched
-        links were selected -- so the random null here uses the cross-branch max,
-        not the per-branch union null of :meth:`run`. Pooled, size-matched (one
-        random link per enriched link).
-
-        Returns a tidy ``link, group, branch, abs_max_force`` DataFrame (also
-        stored on ``self.result_``); plottable via :meth:`plot`.
+        ``enr`` maps each scorable enriched link to ``{'abs_max_force', 'branch'}``
+        (the stronger lineage); ``present`` is the enriched links that were
+        scorable, in order. Enriched forces are cached on the branches, so this is
+        cheap to call.
         """
-        rng = np.random.default_rng(random_state)
         enr = self.selector.combined_abs_max_force(self.enriched_links)
         present = [l for l in self.enriched_links if l in enr]
-        n = len(present)
+        return enr, present
 
-        pool = self._build_constrained_pool(cell_labels, states, threshold, cluster_column)
-        if len(pool) < n:
-            print(f"{type(self).__name__}.run_constrained: constrained pool has only "
-                  f"{len(pool)} links (< {n} enriched); using all.")
-        sel = (rng.choice(len(pool), size=min(n, len(pool)), replace=False)
-               if pool else [])
-        sampled = [pool[i] for i in sel]
+    def _null_result(self, enr, present, sampled):
+        """Tidy enriched-vs-random table for ``sampled`` random links.
+
+        Both groups are scored by abs-max TF force across all branches (the
+        stronger lineage per link, via :meth:`ForceSelector.combined_abs_max_force`)
+        -- exactly how the enriched links were selected. ``enr``/``present`` come
+        from :meth:`_combined_enriched`. Stores and returns the
+        ``link, group, branch, abs_max_force`` DataFrame.
+        """
         rnd = self.selector.combined_abs_max_force(sampled)
 
         rows = [{'link': l, 'group': 'enriched', 'branch': enr[l]['branch'],
@@ -1091,6 +1088,52 @@ class TFForceValidation:
                   'abs_max_force': rnd[l]['abs_max_force']} for l in sampled if l in rnd]
         self.result_ = pd.DataFrame(rows).sort_values('group').reset_index(drop=True)
         return self.result_
+
+    def run_constrained(self, cell_labels, states=('PB-2', 'GC-1'), threshold=0.5,
+                        cluster_column='Cluster', random_state=0):
+        """Pooled enriched-vs-random comparison with a *state-constrained* null.
+
+        Unlike :meth:`run`, the random links are not a TF x target cross product
+        drawn from the whole universe: they are sampled from the links *present*
+        (direct-effect ``prop['es']['w'] != 0``, the sparse fitted GRN) in windows
+        whose combined composition of ``states`` exceeds ``threshold``
+        (:meth:`_qualifying_windows`), after removing every enriched TF and target
+        node. The link is sampled first; its TF force is computed post hoc. Both
+        groups are scored by abs-max TF force across all branches -- exactly how
+        the enriched links were selected -- so the random null here uses the
+        cross-branch max, not the per-branch union null of :meth:`run`. Pooled,
+        size-matched (one random link per enriched link).
+
+        Returns a tidy ``link, group, branch, abs_max_force`` DataFrame (also
+        stored on ``self.result_``); plottable via :meth:`plot`.
+        """
+        rng = np.random.default_rng(random_state)
+        enr, present = self._combined_enriched()
+        windows = self._qualifying_windows(cell_labels, states, threshold, cluster_column)
+        sampled = self._sample_present_links(windows, 'w', len(present), rng)
+        return self._null_result(enr, present, sampled)
+
+    def run_true_null(self, varname='w_in', random_state=0):
+        """Pooled enriched-vs-random comparison with a *true* (unconstrained) null.
+
+        The random links are sampled from the links *present* in the ``varname``
+        graph across **all** network windows (every node of ``prop['es']``, not
+        just the trajectory windows a branch traverses), after removing every
+        enriched TF and target node. Default ``varname='w_in'`` -- the same
+        total-effect graph the TF forces are computed from. Links are sampled
+        first; their force is computed post hoc and scored as abs-max across all
+        branches, identical to :meth:`run_constrained` (only the sampling universe
+        differs: the whole graph instead of PB-2/GC-1 windows). Size-matched.
+
+        Returns a tidy ``link, group, branch, abs_max_force`` DataFrame (also
+        stored on ``self.result_``); plottable via :meth:`plot`.
+        """
+        rng = np.random.default_rng(random_state)
+        d = self.selector.any_waves().dictys_dynamic_object
+        enr, present = self._combined_enriched()
+        windows = range(d.prop['es'][varname].shape[2])
+        sampled = self._sample_present_links(windows, varname, len(present), rng)
+        return self._null_result(enr, present, sampled)
 
     # ------------------------------------------------------------------
     # public API (pooled, no phases)
