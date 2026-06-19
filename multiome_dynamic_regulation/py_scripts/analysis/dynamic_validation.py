@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # TFForceValidation builds its force selector from TFForceWaves.ForceSelector and
 # bins links to phases via RegulatoryPhases.assign_phases (importing temporal_clustering
 # also runs its ensure() so the firefate package is on the path).
-from methods.FIREFate.multiome_dynamic_regulation.py_scripts.analysis.state_dynamics import TFForceWaves, RegulatoryPhases
+from state_dynamics import TFForceWaves, RegulatoryPhases
 
 # ---------------------------------------------------------------------------
 # Class: validation of enriched links vs random links
@@ -414,6 +414,181 @@ class TFForceValidation:
         ax.set_xticks(positions)
         ax.set_xticklabels(group_labels)
         ax.set_ylabel(ylabel)
+        return fig, ax
+
+    # ------------------------------------------------------------------
+    # multi-set comparison, split by phase: several enriched sets vs ONE
+    # shared random null, within each branch-qualified phase
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def compare_sets_by_phase(cls, branches, enriched_sets, switch_pseudotimes,
+                              varname='w_in', exclude='tf_and_target', random_state=0,
+                              n_tf=None, n_target=None,
+                              top_k=5, temperature=1.0, method='weighted_mean'):
+        """Per-(branch, phase) comparison of several enriched sets vs ONE shared null.
+
+        The phase-split analogue of :meth:`compare_sets`. Each enriched link is
+        scored by abs-max TF force across all branches (its stronger lineage,
+        ``mode='combined'``) and binned to a phase *of that lineage* by the softmax
+        peak-pseudotime rule (:meth:`RegulatoryPhases.assign_phases`) against
+        ``switch_pseudotimes[branch]``. Because the phase is the interval the force
+        peak falls in, ``max_t |force(t)|`` is already the in-phase peak force.
+
+        Only branches present in ``switch_pseudotimes`` are kept -- a link whose
+        winning lineage has no switches there is dropped. Within every
+        ``(branch, phase)`` cell ONE shared random null -- non-enriched links (every
+        TF and every target from ALL sets removed via ``exclude``), scored and
+        phase-binned on the same branch -- is drawn, size-matched to the LARGEST
+        enriched set in that cell.
+
+        Parameters
+        ----------
+        branches : TFForceWaves, dict {name: TFForceWaves}, or ForceSelector
+            Fitted branch(es) supplying forces (e.g. ``{'PB': waves_pb,
+            'GC': waves_gc}``). Both lineages are needed to pick each link's winning
+            branch even when only one branch is plotted.
+        enriched_sets : dict {label: links}
+            One entry per enriched box (e.g. ``{'State-specific': ss_links,
+            'Episodic': ep_links}``). Insertion order preserved.
+        switch_pseudotimes : dict {branch: sequence}
+            Phase boundaries per lineage (``N`` switches -> ``N + 1`` phases). Pass
+            only ``{'PB': pb_switches}`` to restrict to the PB branch.
+        n_tf, n_target, exclude, random_state :
+            Random-pool controls, as in :meth:`run` (the per-phase split thins the
+            pool, so a larger ``n_tf``/``n_target`` may be needed than the pooled
+            comparison).
+        top_k, temperature, method :
+            Softmax peak-pseudotime parameters, kept identical for enriched and
+            random links.
+
+        Returns
+        -------
+        pandas.DataFrame with columns ``group, link, branch, phase, abs_max_force``
+        (``group`` = each set's label or ``'random'``). Plot one branch at a time
+        with :meth:`plot_multi_by_phase`.
+        """
+        selector = (branches if isinstance(branches, TFForceWaves.ForceSelector)
+                    else TFForceWaves.ForceSelector(branches, varname=varname))
+        rng = np.random.default_rng(random_state)
+        switch_by_branch = {b: np.sort(np.asarray(s, dtype=float))
+                            for b, s in switch_pseudotimes.items()}
+        softmax = dict(top_k=top_k, temperature=temperature, method=method)
+
+        def assign(links, branch):
+            fc, dtime = selector.force_curves(links, branch=branch)
+            return RegulatoryPhases.assign_phases(
+                fc, dtime, switch_by_branch[branch], **softmax)
+
+        # 1) enriched sets -> rows, grouped by winning (branch, phase). Track the
+        #    largest enriched count per cell so the null can be size-matched to it.
+        rows, all_links = [], []
+        n_per_cell = defaultdict(int)         # (branch, phase) -> max set size
+        for label, links in enriched_sets.items():
+            links = [tuple(l) for l in links]
+            all_links += links
+            combined = selector.combined_abs_max_force(links)
+            by_branch = defaultdict(list)
+            for l in links:
+                if l in combined and combined[l]['branch'] in switch_by_branch:
+                    by_branch[combined[l]['branch']].append(l)
+            per_cell = defaultdict(int)
+            for branch, ls in by_branch.items():
+                phases = assign(ls, branch)
+                for l in ls:
+                    p = phases[l]
+                    per_cell[(branch, p)] += 1
+                    rows.append({'group': label, 'link': l, 'branch': branch,
+                                 'phase': p,
+                                 'abs_max_force': combined[l]['abs_max_force']})
+            for cell, c in per_cell.items():
+                n_per_cell[cell] = max(n_per_cell[cell], c)
+
+        # 2) ONE shared random null: non-enriched pool (all sets' TFs/targets
+        #    removed), scored & phase-binned per branch, matched per (branch, phase).
+        v = cls(selector, enriched_links=all_links, varname=varname, mode='combined')
+        pool_links = v._build_random_pool(n_tf, n_target, exclude, rng)
+        for branch in switch_by_branch:
+            fc, dtime = selector.force_curves(pool_links, branch=branch)
+            rnd_phase = RegulatoryPhases.assign_phases(
+                fc, dtime, switch_by_branch[branch], **softmax)
+            rnd_force = selector.abs_max(fc)
+            pool_by_phase = defaultdict(list)
+            for l, p in rnd_phase.items():
+                pool_by_phase[p].append(l)
+            for (b, p), n in n_per_cell.items():
+                if b != branch:
+                    continue
+                cands = pool_by_phase.get(p, [])
+                if len(cands) < n:
+                    print(f"{cls.__name__}.compare_sets_by_phase: {branch} phase {p} "
+                          f"has only {len(cands)} random links (< {n}); using all. "
+                          f"Increase n_tf/n_target.")
+                idx = (rng.choice(len(cands), size=min(n, len(cands)), replace=False)
+                       if cands else [])
+                for i in idx:
+                    rows.append({'group': 'random', 'link': cands[i], 'branch': branch,
+                                 'phase': p, 'abs_max_force': rnd_force[cands[i]]})
+
+        return (pd.DataFrame(rows)
+                .sort_values(['branch', 'phase', 'group'])
+                .reset_index(drop=True))
+
+    @staticmethod
+    def plot_multi_by_phase(df, branch, group_order, group_labels=None,
+                            figsize=(9, 6), ylabel='Abs max TF force', colors=None,
+                            xlabel=None):
+        """Grouped box plot for ONE branch from a :meth:`compare_sets_by_phase` table.
+
+        One cluster of boxes per phase of ``branch``; within each cluster one box per
+        group in ``group_order`` (the set labels then ``'random'``). ``group_labels``
+        are the legend labels (default: ``group_order``); ``colors`` is one colour per
+        group (default cycles a red/orange/grey palette). The x-tick labels default
+        to ``Phase I, Phase II, ...`` (one per phase present); pass ``xlabel`` (one
+        label per phase) to override.
+        """
+        sub = df[df['branch'] == branch]
+        phases = sorted(sub['phase'].unique())
+        if group_labels is None:
+            group_labels = list(group_order)
+        if colors is None:
+            base = ['#d1495b', '#edae49', '#9aa0a6', '#66a182', '#2e4057']
+            colors = [base[i % len(base)] for i in range(len(group_order))]
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        n = len(group_order)
+        width = 0.8 / n
+        for gi, g in enumerate(group_order):
+            offset = (gi - (n - 1) / 2) * width
+            positions, data = [], []
+            for pi, p in enumerate(phases):
+                vals = sub[(sub['phase'] == p) & (sub['group'] == g)]['abs_max_force'].values
+                positions.append(pi + offset)
+                data.append(vals)
+            bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                            patch_artist=True, showfliers=False,
+                            medianprops=dict(color='black'))
+            for patch in bp['boxes']:
+                patch.set_facecolor(colors[gi])
+                patch.set_alpha(0.6)
+            for pos, vals in zip(positions, data):
+                if len(vals) == 0:
+                    continue
+                x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+                ax.scatter(x, vals, color=colors[gi], edgecolor='black',
+                           linewidth=0.4, s=22, zorder=3)
+
+        roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V'}
+        ax.set_xticks(range(len(phases)))
+        ax.set_xticklabels(xlabel if xlabel is not None
+                           else [f'Phase {roman.get(p, p)}' for p in phases])
+        ax.set_ylabel(ylabel)
+        handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
+                   for gi in range(n)]
+        ax.legend(handles, group_labels, frameon=False)
         return fig, ax
 
     # ------------------------------------------------------------------
