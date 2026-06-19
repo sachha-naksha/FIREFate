@@ -869,3 +869,115 @@ class RegulatoryPhases:
             for state in boundary_states
         ]
         return self.classify_phases(switch_pseudotimes, links=links)
+
+
+# ---------------------------------------------------------------------------
+# Phase-ordered force heatmap
+# ---------------------------------------------------------------------------
+
+def plot_force_heatmap_by_phase(
+    force_curves,
+    dtime,
+    links,
+    switch_pseudotimes,
+    top_k=5,
+    temperature=1.0,
+    method='weighted_mean',
+    cmap='RdBu_r',
+    vmax=None,
+    figsize=(4, 6),
+    plot_figure=True,
+    show_phase_dividers=True,
+    ytick_fontsize=10,
+):
+    """Plot a force heatmap with links grouped into regulatory phases.
+
+    Links are first binned into temporal phases by the softmax-weighted peak of
+    their force wave (``switch_pseudotimes`` are the lineage-derived cell-state
+    termination pseudotimes that separate consecutive phases -- the same
+    boundaries used by :class:`RegulatoryPhases`; ``N`` switches -> ``N+1``
+    phases). Within each phase rows are ordered by *ascending* peak pseudotime,
+    so a link whose force wave peaks earlier sits higher and later-peaking links
+    fall to lower rows. Both activations (positive force) and repressions
+    (negative force) are shown on a symmetric diverging color scale.
+
+    Parameters
+    ----------
+    force_curves : DataFrame
+        Multi-indexed (TF, Target) force curves over pseudotime.
+    dtime : array-like
+        Pseudotime value per column/window.
+    links : list of (TF, Target)
+        Links to classify and plot.
+    switch_pseudotimes : sequence of float
+        Pseudotimes separating consecutive phases (e.g. cell-state termination
+        pseudotimes from :class:`StateFrequency`).
+    top_k, temperature, method :
+        Softmax peak-pseudotime parameters (passed to the module helpers).
+    cmap, vmax, figsize :
+        Heatmap styling. ``vmax`` defaults to the data's max ``|force|`` and the
+        scale is made symmetric (``vmin = -vmax``).
+    show_phase_dividers : bool
+        Draw a line between phase blocks and label each block.
+
+    Returns
+    -------
+    (ordered_df, phases, fig)
+        ordered_df : DataFrame of force values, rows phase-then-peak ordered,
+            indexed by ``"TF->Target"`` labels, columns the pseudotimes.
+        phases : list of phase numbers aligned with ``ordered_df`` rows.
+        fig : matplotlib Figure, or ``None`` when ``plot_figure`` is False.
+    """
+    sub = force_curves.loc[links]
+    phase_of = RegulatoryPhases.assign_phases(
+        sub, dtime, switch_pseudotimes,
+        top_k=top_k, temperature=temperature, method=method,
+    )
+    ordered, reg_pt = order_links(
+        sub, dtime, top_k=top_k, temperature=temperature, method=method,
+    )
+    # Group by phase, then ascending peak pseudotime within each phase so the
+    # earliest-peaking link is the top row of its block.
+    ordered = sorted(ordered, key=lambda link: (phase_of[link], reg_pt[link]['pseudotime']))
+    phases = [phase_of[link] for link in ordered]
+
+    labels = [f"{tf}->{target}" for tf, target in ordered]
+    dnet = np.array([sub.loc[link].values for link in ordered])
+    ordered_df = pd.DataFrame(
+        dnet, index=labels, columns=[f"{x:.4f}" for x in dtime]
+    )
+
+    fig = None
+    if plot_figure:
+        vmax_val = float(np.abs(dnet).max()) if vmax is None else vmax
+        fig, ax = plt.subplots(figsize=figsize)
+        im = ax.imshow(dnet, aspect='auto', interpolation='none', cmap=cmap,
+                       vmin=-vmax_val, vmax=vmax_val)
+        plt.colorbar(im, ax=ax, label="Force")
+
+        ax.set_xlabel("Pseudotime")
+        num_ticks = min(10, dnet.shape[1])
+        tick_positions = np.linspace(0, dnet.shape[1] - 1, num_ticks, dtype=int)
+        dtime_arr = np.asarray(dtime)
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels([f"{dtime_arr[i]:.4f}" for i in tick_positions],
+                           rotation=45, ha="right")
+
+        ax.set_yticks(range(len(labels)))
+        ax.set_yticklabels(labels, fontsize=ytick_fontsize)
+
+        if show_phase_dividers:
+            start = 0
+            for phase in sorted(set(phases)):
+                count = phases.count(phase)  # phases is contiguous per block
+                if start > 0:
+                    ax.axhline(start - 0.5, color="black", linewidth=1.5)
+                ax.text(0.2, start + 0.05, f"Phase {phase}",
+                        va="top", ha="left", fontsize=ytick_fontsize,
+                        fontweight="bold",
+                        bbox=dict(boxstyle="round", fc="white", ec="black", alpha=0.8))
+                start += count
+
+        plt.tight_layout()
+
+    return ordered_df, phases, fig
