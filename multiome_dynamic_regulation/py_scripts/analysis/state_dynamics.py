@@ -23,9 +23,12 @@ Refactor of ``waves_quantification.ipynb`` into:
   heatmap. Its nested :class:`TFForceWaves.ForceSelector` picks per-link forces
   either lineage-specific (one branch) or combined across lineages.
 
-- :class:`RegulatoryPhases` -- classification of input links into phases given
-  the cell-state termination pseudotimes (softmax peak-pseudotime per force wave,
-  binned against the boundaries).
+- :class:`RegulatoryPhases` -- phase-splitting base class: owns the phase
+  boundaries (cell-state termination pseudotimes) and the binning rule. Subclasses
+  :class:`ForceWavePhases` (bin links by their softmax force-wave peak) and
+  :class:`BindingPhases` (rank TF binding scores per phase, pick the top-k TFs per
+  category) add what is binned; the ``dynamic_validation`` TF-force validators reuse
+  its static :meth:`~RegulatoryPhases.assign_phases`.
 
 - :class:`TFForceValidation` / :class:`PhaseValidation` -- compare the FireFate
   links against size-matched random links by abs-max TF force, pooled across the
@@ -41,6 +44,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_hex
 from scipy.signal import find_peaks
 
 from ensure_firefate_path import ensure
@@ -742,34 +746,78 @@ class TFForceWaves:
 
 
 # ---------------------------------------------------------------------------
-# Class 3: classification of links into regulatory phases
+# Class 3: regulatory phases -- phase-splitting base + force-wave / binding subclasses
 # ---------------------------------------------------------------------------
 
 class RegulatoryPhases:
-    """Classify regulatory links into temporal *phases*.
+    """Split a lineage trajectory into temporal *phases* (phase-splitting base class).
 
-    A phase is a cluster of links whose force-wave peaks fall in the same
-    interval of pseudotime, the intervals being delimited by cell-state
-    termination pseudotimes (from :class:`StateFrequency`). Each link's peak
-    pseudotime is the softmax-weighted peak of its force wave; binning those
-    peaks against the termination pseudotimes assigns a phase (3 phases for PB,
-    2 for GC).
+    A *phase* is an interval of pseudotime delimited by cell-state termination
+    pseudotimes (the "switches", from :class:`StateFrequency`). ``N`` switches ->
+    ``N + 1`` phases (1-indexed): a pseudotime ``p`` lands in phase ``k`` where
+    ``switch[k-2] < p <= switch[k-1]`` (the ``np.digitize(..., right=True)`` rule).
+    So PB uses ``[ActB-4_termination, earlyPB_termination]`` (3 phases) and GC uses
+    ``[ActB-3_termination]`` (2 phases).
+
+    This base owns only the phase boundaries and the binning rule; subclasses add
+    *what* is binned:
+
+    - :class:`ForceWavePhases` -- classify TF-Target links by the softmax-weighted
+      peak of their force wave.
+    - :class:`BindingPhases` -- rank TF binding scores within each phase and pick
+      the top-k TFs per category.
+
+    The ``dynamic_validation`` TF-force validators reuse the static
+    :meth:`assign_phases` (the force-wave binning) directly.
     """
 
-    def __init__(self, waves, top_k=5, temperature=1.0, method='weighted_mean'):
+    def __init__(self, switch_pseudotimes):
         """
         Parameters
         ----------
-        waves : TFForceWaves
-            Fitted branch whose ``compute_forces(links)`` has been called so
-            ``force_curves`` / ``dtime`` hold the force waves to classify.
-        top_k, temperature, method :
-            Softmax peak-pseudotime parameters (passed to the module helpers).
+        switch_pseudotimes : sequence of float
+            Cell-state termination pseudotimes separating consecutive phases
+            (``N`` switches -> ``N + 1`` phases). Sorted on construction.
         """
-        self.waves = waves
-        self.top_k = top_k
-        self.temperature = temperature
-        self.method = method
+        self.boundaries = np.sort(np.asarray(switch_pseudotimes, dtype=float))
+
+    @property
+    def n_phases(self):
+        """Number of phases (``len(boundaries) + 1``)."""
+        return len(self.boundaries) + 1
+
+    def phase_of(self, pseudotime):
+        """1-indexed phase of pseudotime value(s) (scalar or array)."""
+        return np.digitize(pseudotime, self.boundaries, right=True) + 1
+
+    @classmethod
+    def from_states(cls, state_frequency, window_indices, boundary_states,
+                    termination_method='threshold', threshold_frac=0.1,
+                    prominence=10, distance=3, **kwargs):
+        """Build from cell-state termination pseudotimes (the phase boundaries).
+
+        Computes the termination pseudotime of each state in ``boundary_states``
+        (in order) from a :class:`StateFrequency` instance, then constructs the
+        phase splitter. Extra ``kwargs`` are forwarded to the subclass constructor
+        (e.g. ``waves=`` for :class:`ForceWavePhases`; ``chromatin_object=`` and
+        ``lineage=`` for :class:`BindingPhases`).
+
+        Example
+        -------
+        PB (3 phases)::
+
+            ForceWavePhases.from_states(sf_pb, PB_post_bifurcation_window_indices,
+                                        ['ActB-4', 'earlyPB'], waves=waves_pb)
+        """
+        switch_pseudotimes = [
+            state_frequency.termination_pseudotime(
+                state, window_indices,
+                method=termination_method, threshold_frac=threshold_frac,
+                prominence=prominence, distance=distance,
+            )
+            for state in boundary_states
+        ]
+        return cls(switch_pseudotimes, **kwargs)
 
     @staticmethod
     def assign_phases(force_curves, dtime, switch_pseudotimes,
@@ -790,6 +838,34 @@ class RegulatoryPhases:
             for link, info in reg_pt.items()
         }
 
+
+class ForceWavePhases(RegulatoryPhases):
+    """Classify TF-Target links into phases by the softmax peak of their force wave.
+
+    Each link's peak pseudotime is the softmax-weighted peak of its force wave
+    (from ``waves.force_curves``); binning those peaks against the phase boundaries
+    (inherited from :class:`RegulatoryPhases`) assigns a phase.
+    """
+
+    def __init__(self, switch_pseudotimes, waves, top_k=5, temperature=1.0,
+                 method='weighted_mean'):
+        """
+        Parameters
+        ----------
+        switch_pseudotimes : sequence of float
+            Phase boundaries (see :class:`RegulatoryPhases`).
+        waves : TFForceWaves
+            Fitted branch whose ``compute_forces(links)`` has been called so
+            ``force_curves`` / ``dtime`` hold the force waves to classify.
+        top_k, temperature, method :
+            Softmax peak-pseudotime parameters (passed to the module helpers).
+        """
+        super().__init__(switch_pseudotimes)
+        self.waves = waves
+        self.top_k = top_k
+        self.temperature = temperature
+        self.method = method
+
     def link_peak_pseudotimes(self, links=None):
         """Softmax peak pseudotime per link.
 
@@ -805,28 +881,25 @@ class RegulatoryPhases:
                                     top_k=self.top_k, temperature=self.temperature)
         return aggregate_max_points(max_points, method=self.method)
 
-    def classify_phases(self, switch_pseudotimes, links=None):
+    def classify_phases(self, links=None):
         """Assign each link to a phase by its softmax peak pseudotime.
 
-        ``switch_pseudotimes`` is the ordered list of cell-state termination
-        pseudotimes that separate consecutive phases. ``N`` switches produce
-        ``N + 1`` phases (1-indexed): a link with peak pseudotime ``p`` lands in
-        phase ``k`` where ``switch[k-2] < p <= switch[k-1]``. So PB uses
-        ``[ActB-4_termination, earlyPB_termination]`` (3 phases) and GC uses
-        ``[ActB-3_termination]`` (2 phases).
+        Each link's peak pseudotime is binned against the phase boundaries
+        (``self.boundaries``) via :meth:`RegulatoryPhases.phase_of`. Build the
+        instance from cell-state terminations with :meth:`RegulatoryPhases.from_states`
+        (``ForceWavePhases.from_states(sf, window_indices, boundary_states, waves=...)``).
 
         Returns
         -------
         pandas.DataFrame with columns ``TF, Target, peak_pseudotime, phase``,
         sorted by phase then peak pseudotime.
         """
-        boundaries = np.sort(np.asarray(switch_pseudotimes, dtype=float))
         reg_pt = self.link_peak_pseudotimes(links=links)
 
         rows = []
         for (tf, target), info in reg_pt.items():
             peak = info['pseudotime']
-            phase = int(np.digitize(peak, boundaries, right=True)) + 1
+            phase = int(self.phase_of(peak))
             rows.append({'TF': tf, 'Target': target,
                          'peak_pseudotime': peak, 'phase': phase})
 
@@ -836,39 +909,201 @@ class RegulatoryPhases:
             .reset_index(drop=True)
         )
 
-    def classify_phases_from_states(self, state_frequency, window_indices,
-                                    boundary_states, links=None,
-                                    termination_method='threshold', threshold_frac=0.1,
-                                    prominence=10, distance=3):
-        """Phase classification driven directly by cell-state termination pseudotimes.
 
-        Computes the termination pseudotime of each state in ``boundary_states``
-        (in order) from a :class:`StateFrequency` instance, then bins links via
-        :meth:`classify_phases`.
+class BindingPhases(RegulatoryPhases):
+    """Rank TF binding scores within each phase and pick the top-k TFs per category.
 
-        Example
-        -------
-        PB (3 phases)::
+    Inherits the phase boundaries / binning from :class:`RegulatoryPhases` and binds
+    a chromatin object (:class:`~firefate.core.pseudotime_curves.SmoothedCurvesChromatin`
+    or any object exposing ``pb_pseudotime``/``gc_pseudotime`` and
+    ``series_pb``/``series_gc``) on one lineage. A TF's *per-phase binding score* is
+    the ``max`` of its smoothed binding-score curve over the windows falling in that
+    phase -- the analogue of the abs-max TF force used for link validation, with the
+    abs dropped since binding scores are non-negative.
 
-            phases.classify_phases_from_states(
-                sf, PB_post_bifurcation_window_indices,
-                boundary_states=['ActB-4', 'earlyPB'])
+    The selector replaces hand-picked TF panels: given a ``{category: [TF, ...]}``
+    universe (e.g. the state-specific TFs vs the episodic TFs), it returns the top-k
+    TFs **per phase** per category via :meth:`categories_by_phase`, as
+    ``{phase: {category: {TF: color}}}``. Phases are lineage-specific differentiation
+    windows (PB has 3, GC has 2), so picks are never pooled across phases. The
+    per-phase selection drives the **box** view (:meth:`plot_box` / :meth:`top_tfs_table`);
+    continuous binding-score / OCR curves over pseudotime are a separate concern,
+    handled by ``SmoothedCurvesChromatin`` in the ``pseudotime_curves`` module.
+    """
 
-        GC (2 phases)::
+    #: default per-category sequential colormaps (cycled in category order)
+    _DEFAULT_CMAPS = ('Purples', 'Oranges', 'Greens', 'Blues', 'Reds')
 
-            phases.classify_phases_from_states(
-                sf, GC_post_bifurcation_window_indices,
-                boundary_states=['ActB-3'])
+    def __init__(self, switch_pseudotimes, chromatin_object, lineage):
         """
-        switch_pseudotimes = [
-            state_frequency.termination_pseudotime(
-                state, window_indices,
-                method=termination_method, threshold_frac=threshold_frac,
-                prominence=prominence, distance=distance,
-            )
-            for state in boundary_states
-        ]
-        return self.classify_phases(switch_pseudotimes, links=links)
+        Parameters
+        ----------
+        switch_pseudotimes : sequence of float
+            Phase boundaries (cell-state termination pseudotimes) for this lineage;
+            ``N`` switches -> ``N + 1`` phases. Use :meth:`RegulatoryPhases.from_states`
+            to derive them from a :class:`StateFrequency`.
+        chromatin_object : SmoothedCurvesChromatin-like
+            ``process_dynamics`` must already have run so ``series_pb``/``series_gc``
+            (TF -> smoothed binding-score curve over this lineage's windows) and
+            ``pb_pseudotime``/``gc_pseudotime`` are populated.
+        lineage : {'pb', 'gc'}
+            Which lineage's binding series / pseudotimes to bin.
+        """
+        super().__init__(switch_pseudotimes)
+        self.lineage = lineage
+        if lineage == 'pb':
+            self.pseudotime = np.asarray(chromatin_object.pb_pseudotime)
+            self.series = chromatin_object.series_pb
+        elif lineage == 'gc':
+            self.pseudotime = np.asarray(chromatin_object.gc_pseudotime)
+            self.series = chromatin_object.series_gc
+        else:
+            raise ValueError("lineage must be 'pb' or 'gc'.")
+        if not self.series:
+            raise ValueError(
+                "chromatin_object has no processed series; call process_dynamics() first.")
+        # phase index (1-indexed) of every window on this lineage
+        self.window_phase = self.phase_of(self.pseudotime)
+
+    @staticmethod
+    def tfs_from_links(links):
+        """Unique TF names from an iterable of ``(TF, Target)`` links (order-preserving)."""
+        return list(dict.fromkeys(tf for tf, _ in links))
+
+    def phase_score(self, tf, phase):
+        """Max binding score of ``tf`` over the windows in ``phase`` (NaN if none)."""
+        if tf not in self.series:
+            return np.nan
+        vals = np.asarray(self.series[tf], dtype=float)[self.window_phase == phase]
+        vals = vals[~np.isnan(vals)]
+        return float(vals.max()) if vals.size else np.nan
+
+    def rank_tfs(self, tfs, phase):
+        """``tfs`` ranked as ``(TF, score)`` by descending per-phase binding score.
+
+        TFs absent from the series, or with no windows in the phase (NaN score), are
+        dropped.
+        """
+        scored = [(tf, self.phase_score(tf, phase)) for tf in dict.fromkeys(tfs)]
+        scored = [(tf, s) for tf, s in scored if not np.isnan(s)]
+        return sorted(scored, key=lambda kv: kv[1], reverse=True)
+
+    def top_tfs(self, tfs, phase, top_k=5):
+        """Names of the top-``top_k`` TFs in ``phase`` by binding score."""
+        return [tf for tf, _ in self.rank_tfs(tfs, phase)[:top_k]]
+
+    def top_tfs_table(self, category_tfs, top_k=5):
+        """Long table of the top-``top_k`` TFs per (phase, category).
+
+        ``category_tfs`` maps each category name to its TF universe (an iterable of
+        TF names; pass :meth:`tfs_from_links` output for link sets). Returns a
+        DataFrame with columns ``phase, category, rank, TF, binding_score``.
+        """
+        rows = []
+        for phase in range(1, self.n_phases + 1):
+            for cat, tfs in category_tfs.items():
+                for rank, (tf, score) in enumerate(self.rank_tfs(tfs, phase)[:top_k], 1):
+                    rows.append({'phase': phase, 'category': cat, 'rank': rank,
+                                 'TF': tf, 'binding_score': score})
+        return pd.DataFrame(rows)
+
+    # ------------------------------------------------------------------
+    # categories-style dicts (drop-in for the chromatin plotters)
+    # ------------------------------------------------------------------
+
+    def _resolve_cmaps(self, category_tfs, category_cmaps):
+        if category_cmaps is not None:
+            return category_cmaps
+        return {cat: self._DEFAULT_CMAPS[i % len(self._DEFAULT_CMAPS)]
+                for i, cat in enumerate(category_tfs)}
+
+    @staticmethod
+    def _shade(tfs, cmap):
+        """``{TF: hex}`` colouring ``tfs`` darkest->lightest from ``cmap`` (rank order)."""
+        if not tfs:
+            return {}
+        cmap = plt.get_cmap(cmap)
+        levels = np.linspace(0.85, 0.35, len(tfs))
+        return {tf: to_hex(cmap(level)) for tf, level in zip(tfs, levels)}
+
+    def categories_by_phase(self, category_tfs, top_k=5, category_cmaps=None):
+        """``{phase: {category: {TF: color}}}`` of the top-``top_k`` TFs per (phase, category).
+
+        Phases are this lineage's differentiation windows (PB: 3, GC: 2); each phase
+        gets its own independent top-``top_k`` ranking -- picks are never pooled across
+        phases. ``category_tfs`` maps each category to its TF universe. ``category_cmaps``
+        optionally maps each category to a matplotlib colormap name (default: cycle
+        :attr:`_DEFAULT_CMAPS`); within a category TFs are shaded darkest (highest
+        binding score) to lightest. This drives the per-phase **box** view
+        (:meth:`plot_box`); continuous binding/OCR curves over pseudotime are a
+        separate concern handled by ``SmoothedCurvesChromatin`` in the
+        ``pseudotime_curves`` module.
+        """
+        cmaps = self._resolve_cmaps(category_tfs, category_cmaps)
+        return {
+            phase: {cat: self._shade(self.top_tfs(tfs, phase, top_k=top_k), cmaps[cat])
+                    for cat, tfs in category_tfs.items()}
+            for phase in range(1, self.n_phases + 1)
+        }
+
+    def plot_box(self, category_tfs, top_k=5, figsize=(8, 6),
+                 ylabel='TF binding score (in-phase max)', category_cmaps=None,
+                 annotate=False):
+        """Per-phase box plot of the top-``top_k`` TFs' binding scores, grouped by category.
+
+        One cluster of boxes per phase of this lineage; within each cluster one box
+        per category, holding *that phase's* top-``top_k`` TFs' per-phase binding
+        scores (the in-phase max -- the metric the selection ranks on). Each point is
+        one selected TF; with ``annotate=True`` the TF names are drawn beside them.
+        Phases are never pooled, so a TF appears only under the phase(s) it tops.
+
+        Continuous binding-score / OCR curves over pseudotime are *not* drawn here --
+        use ``SmoothedCurvesChromatin`` in the ``pseudotime_curves`` module for those.
+        """
+        table = self.top_tfs_table(category_tfs, top_k=top_k)
+        phases = list(range(1, self.n_phases + 1))
+        cats = list(category_tfs)
+        cmaps = self._resolve_cmaps(category_tfs, category_cmaps)
+        colors = [to_hex(plt.get_cmap(cmaps[c])(0.6)) for c in cats]
+
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        n = len(cats)
+        width = 0.8 / n
+        for ci, cat in enumerate(cats):
+            offset = (ci - (n - 1) / 2) * width
+            positions, data, names = [], [], []
+            for pi, p in enumerate(phases):
+                sub = table[(table['phase'] == p) & (table['category'] == cat)]
+                positions.append(pi + offset)
+                data.append(sub['binding_score'].values)
+                names.append(list(sub['TF']))
+            bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                            patch_artist=True, showfliers=False,
+                            medianprops=dict(color='black'))
+            for patch in bp['boxes']:
+                patch.set_facecolor(colors[ci])
+                patch.set_alpha(0.6)
+            for pos, vals, nm in zip(positions, data, names):
+                if len(vals) == 0:
+                    continue
+                x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+                ax.scatter(x, vals, color=colors[ci], edgecolor='black',
+                           linewidth=0.4, s=22, zorder=3)
+                if annotate:
+                    for xi, yi, ni in zip(x, vals, nm):
+                        ax.text(xi, yi, f' {ni}', fontsize=7, va='center')
+
+        roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V'}
+        ax.set_xticks(range(len(phases)))
+        ax.set_xticklabels([f'Phase {roman.get(p, p)}' for p in phases])
+        ax.set_ylabel(ylabel)
+        handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[ci], alpha=0.6)
+                   for ci in range(n)]
+        ax.legend(handles, cats, frameon=False)
+        return fig, ax
 
 
 # ---------------------------------------------------------------------------
