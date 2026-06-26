@@ -1163,7 +1163,10 @@ def plot_force_heatmap_by_phase(
         phases : list of phase numbers aligned with ``ordered_df`` rows.
         fig : matplotlib Figure, or ``None`` when ``plot_figure`` is False.
     """
-    sub = force_curves.loc[links]
+    existing_links = [link for link in links if link in force_curves.index]
+    if not existing_links:
+        raise KeyError("None of the requested links are in force_curves.index")
+    sub = force_curves.loc[existing_links]
     phase_of = RegulatoryPhases.assign_phases(
         sub, dtime, switch_pseudotimes,
         top_k=top_k, temperature=temperature, method=method,
