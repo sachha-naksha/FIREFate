@@ -676,6 +676,22 @@ class SmoothedCurvesChromatin:
                 desc="Extracting Binding Data",
             ))
 
+        # Fail loudly if no window produced any real data. The worker swallows
+        # per-window errors (e.g. a missing binding.tsv.gz) into empty/all-NaN
+        # results, which would otherwise yield empty series and surface as a
+        # confusing error several steps downstream. (v == v is False only for NaN.)
+        got_data = any(
+            any(v == v for v in w_scores.values())
+            for _, w_scores, _ in results
+        )
+        if not got_data:
+            raise FileNotFoundError(
+                f"No binding data extracted from any of {n_windows} windows. "
+                f"Expected per-window files like "
+                f"'{self.base_path}/Subset1/binding.tsv.gz'. Check that base_path is "
+                f"correct and that the binding.tsv.gz files exist."
+            )
+
         # If tfs was None, resolve the union of TFs seen across all windows.
         if self.tfs is None:
             all_tfs = set()
