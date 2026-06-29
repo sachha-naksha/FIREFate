@@ -47,6 +47,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_hex
 from scipy.signal import find_peaks
+from scipy.stats import mannwhitneyu
 
 from ensure_firefate_path import ensure
 
@@ -1149,7 +1150,8 @@ class BindingPhases(RegulatoryPhases):
                  ylabel='TF binding score (in-phase max)', category_cmaps=None,
                  annotate=False, exclusive=False,
                  random_control=False, control_name='Random', random_state=None,
-                 control_cmap='Greys', violin=False, violin_width=1.6):
+                 control_cmap='Greys', violin=False, violin_width=1.6,
+                 significance=False):
         """Per-phase box plot of the top-``top_k`` TFs' binding scores, grouped by category.
 
         One cluster of boxes per phase of this lineage; within each cluster one box
@@ -1172,6 +1174,12 @@ class BindingPhases(RegulatoryPhases):
         The random control stays box-only (its size-matched sample is the baseline; a
         violin of the whole pool behind it would be redundant). ``violin_width`` scales
         the violin width relative to the per-category slot.
+
+        When ``significance=True`` and exactly two *named* categories are present
+        (e.g. ``static`` and ``episodic``), a significance bar is drawn per phase
+        between their boxes, annotated with the two-sided Mann-Whitney U result
+        (stars / ``ns``) computed on the plotted top-``top_k`` TFs of each
+        category in that phase.
         """
         table = self.top_tfs_table(category_tfs, top_k=top_k, exclusive=exclusive,
                                    random_control=random_control,
@@ -1240,6 +1248,58 @@ class BindingPhases(RegulatoryPhases):
                 if annotate:
                     for xi, yi, ni in zip(x, vals, nm):
                         ax.text(xi, yi, f' {ni}', fontsize=7, va='center')
+
+        if significance:
+            named = list(category_tfs)
+            if 'static' in named and 'episodic' in named:
+                pair = ('static', 'episodic')
+            elif len(named) == 2:
+                pair = (named[0], named[1])
+            else:
+                pair = None
+                warnings.warn(
+                    'significance=True needs exactly two named categories '
+                    '(or both "static" and "episodic"); skipping significance bars.')
+            if pair is not None:
+                c1, c2 = pair
+                off1 = (cats.index(c1) - (n - 1) / 2) * width
+                off2 = (cats.index(c2) - (n - 1) / 2) * width
+                lo, hi = ax.get_ylim()
+                rng = hi - lo
+                bar_top = hi
+                for pi, p in enumerate(phases):
+                    d1 = table[(table['phase'] == p)
+                               & (table['category'] == c1)]['binding_score'].values
+                    d2 = table[(table['phase'] == p)
+                               & (table['category'] == c2)]['binding_score'].values
+                    if d1.size < 1 or d2.size < 1:
+                        continue
+                    try:
+                        _, pval = mannwhitneyu(d1, d2, alternative='two-sided')
+                    except ValueError:
+                        continue
+                    if pval < 1e-4:
+                        label = '****'
+                    elif pval < 1e-3:
+                        label = '***'
+                    elif pval < 1e-2:
+                        label = '**'
+                    elif pval < 0.05:
+                        label = '*'
+                    else:
+                        label = 'ns'
+                    top = max(d1.max(), d2.max(),
+                              full.get((p, c1), np.array([-np.inf])).max(),
+                              full.get((p, c2), np.array([-np.inf])).max())
+                    h = top + 0.03 * rng
+                    tick = 0.015 * rng
+                    x1, x2 = pi + off1, pi + off2
+                    ax.plot([x1, x1, x2, x2], [h, h + tick, h + tick, h],
+                            color='black', lw=1.0, clip_on=False)
+                    ax.text((x1 + x2) / 2, h + tick, label,
+                            ha='center', va='bottom', fontsize=9)
+                    bar_top = max(bar_top, h + 2 * tick)
+                ax.set_ylim(lo, bar_top + 0.04 * rng)
 
         roman = {1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V'}
         ax.set_xticks(range(len(phases)))
