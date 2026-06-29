@@ -720,13 +720,14 @@ class SmoothedCurvesChromatin:
     # Trajectory & Processing Methods
     # ------------------------------------------------------------------
 
-    def set_trajectory_info(self, 
-                            pb_indices: List[int], 
-                            gc_indices: List[int], 
-                            window_pseudotimes: Union[List, np.ndarray]):
+    def set_trajectory_info(self,
+                            pb_indices: List[int],
+                            gc_indices: List[int],
+                            window_pseudotimes: Union[List, np.ndarray],
+                            gc_window_pseudotimes: Optional[Union[List, np.ndarray]] = None):
         """
         Register trajectory indices and pseudotime values.
-        
+
         Parameters:
         -----------
         pb_indices : List[int]
@@ -734,15 +735,27 @@ class SmoothedCurvesChromatin:
         gc_indices : List[int]
             0-based indices of windows belonging to the GC trajectory.
         window_pseudotimes : array-like
-            Pseudotime value for every window (index corresponds to window ID).
+            Pseudotime per window ID in the PB-branch alignment frame (e.g.
+            ``AlignTimeScales(..., (0, 2)).pseudotime_of_windows()``). Used for the
+            PB branch, and for the GC branch too unless ``gc_window_pseudotimes``
+            is given.
+        gc_window_pseudotimes : array-like, optional
+            Pseudotime per window ID in the GC-branch alignment frame (e.g.
+            ``AlignTimeScales(..., (0, 3)).pseudotime_of_windows()``). Provide this
+            when the two branches are aligned separately so the GC windows land on
+            the GC pseudotime axis that the GC phase switches are defined in;
+            otherwise the GC windows inherit the PB frame and won't line up with
+            GC-frame switches. Defaults to ``window_pseudotimes``.
         """
         self.pb_indices = pb_indices
         self.gc_indices = gc_indices
         self.window_pseudotimes = np.array(window_pseudotimes)
-        
-        # Map indices to pseudotimes immediately
+        gc_window_pseudotimes = (self.window_pseudotimes if gc_window_pseudotimes is None
+                                 else np.array(gc_window_pseudotimes))
+
+        # Map indices to pseudotimes immediately (each branch in its own frame)
         self.pb_pseudotime = self.window_pseudotimes[self.pb_indices]
-        self.gc_pseudotime = self.window_pseudotimes[self.gc_indices]
+        self.gc_pseudotime = gc_window_pseudotimes[self.gc_indices]
 
     def process_dynamics(self, metric: str = 'score', smooth_sigma: float = 2.0, relative: bool = False):
         """

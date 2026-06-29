@@ -39,6 +39,7 @@ The module-level softmax helpers (:func:`get_max_points`,
 are the canonical implementation; :class:`RegulatoryPhases` reuses them.
 """
 
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -934,7 +935,8 @@ class BindingPhases(RegulatoryPhases):
     #: default per-category sequential colormaps (cycled in category order)
     _DEFAULT_CMAPS = ('Purples', 'Oranges', 'Greens', 'Blues', 'Reds')
 
-    def __init__(self, switch_pseudotimes, chromatin_object, lineage):
+    def __init__(self, switch_pseudotimes, chromatin_object, lineage,
+                 window_indices=None):
         """
         Parameters
         ----------
@@ -948,27 +950,72 @@ class BindingPhases(RegulatoryPhases):
             ``pb_pseudotime``/``gc_pseudotime`` are populated.
         lineage : {'pb', 'gc'}
             Which lineage's binding series / pseudotimes to bin.
+        window_indices : sequence of int, optional
+            Window IDs to restrict the binning to -- pass this lineage's
+            post-bifurcation windows (the same list given to :class:`StateFrequency`,
+            e.g. ``PB_post_bifurcation_window_indices``). The chromatin object spans
+            the *full* trajectory, including the shared pre-bifurcation trunk whose
+            windows (and binding-score values) are identical for PB and GC; binning
+            that trunk collapses both lineages onto the same top TFs. Restricting to
+            the post-bifurcation windows keeps each lineage's phases lineage-specific.
+            When ``None`` the full lineage series is used (legacy behaviour).
         """
         super().__init__(switch_pseudotimes)
         self.lineage = lineage
         if lineage == 'pb':
-            self.pseudotime = np.asarray(chromatin_object.pb_pseudotime)
-            self.series = chromatin_object.series_pb
+            pseudotime = np.asarray(chromatin_object.pb_pseudotime)
+            series = chromatin_object.series_pb
+            traj_windows = np.asarray(chromatin_object.pb_indices)
         elif lineage == 'gc':
-            self.pseudotime = np.asarray(chromatin_object.gc_pseudotime)
-            self.series = chromatin_object.series_gc
+            pseudotime = np.asarray(chromatin_object.gc_pseudotime)
+            series = chromatin_object.series_gc
+            traj_windows = np.asarray(chromatin_object.gc_indices)
         else:
             raise ValueError("lineage must be 'pb' or 'gc'.")
-        if not self.series:
+        if not series:
             raise ValueError(
                 "chromatin_object has no processed series; call process_dynamics() first.")
+        if window_indices is not None:
+            keep = np.isin(traj_windows, np.asarray(list(window_indices)))
+            pseudotime = pseudotime[keep]
+            series = {tf: np.asarray(v)[keep] for tf, v in series.items()}
+        self.pseudotime = pseudotime
+        self.series = series
         # phase index (1-indexed) of every window on this lineage
         self.window_phase = self.phase_of(self.pseudotime)
+        empty = [ph for ph in range(1, self.n_phases + 1)
+                 if not np.any(self.window_phase == ph)]
+        if empty:
+            warnings.warn(
+                f"BindingPhases[{lineage}]: phase(s) {empty} have no windows -- the "
+                f"switch pseudotimes {list(np.round(self.boundaries, 4))} fall outside "
+                f"the binned pseudotime range "
+                f"[{self.pseudotime.min():.4f}, {self.pseudotime.max():.4f}]. "
+                "Check that the switches and the chromatin window pseudotimes share the "
+                "same AlignTimeScales frame.",
+                stacklevel=2,
+            )
 
     @staticmethod
     def tfs_from_links(links):
         """Unique TF names from an iterable of ``(TF, Target)`` links (order-preserving)."""
         return list(dict.fromkeys(tf for tf, _ in links))
+
+    @staticmethod
+    def disjoint_categories(category_tfs):
+        """Make the category TF universes mutually exclusive (union minus intersection).
+
+        A TF that appears in more than one category (e.g. CREB3L2 / TFEC in both the
+        state-specific and episodic sets) is dropped from *every* category, so each
+        category is sampled only from the TFs unique to it. Order within each category
+        is preserved.
+        """
+        counts = {}
+        for tfs in category_tfs.values():
+            for tf in dict.fromkeys(tfs):
+                counts[tf] = counts.get(tf, 0) + 1
+        return {cat: [tf for tf in dict.fromkeys(tfs) if counts[tf] == 1]
+                for cat, tfs in category_tfs.items()}
 
     def phase_score(self, tf, phase):
         """Max binding score of ``tf`` over the windows in ``phase`` (NaN if none)."""
@@ -992,18 +1039,66 @@ class BindingPhases(RegulatoryPhases):
         """Names of the top-``top_k`` TFs in ``phase`` by binding score."""
         return [tf for tf, _ in self.rank_tfs(tfs, phase)[:top_k]]
 
-    def top_tfs_table(self, category_tfs, top_k=5):
+    def phase_pool(self, phase, exclude=(), min_score=0.0):
+        """All eligible ``(TF, score)`` controls in ``phase``, sorted by score.
+
+        Every TF with a non-NaN per-phase binding score at or above ``min_score`` and
+        not in ``exclude`` (typically the named-category TFs). With the default
+        ``min_score=0.0`` this is every measured TF, including non-binders (score 0) --
+        matching the 0-to-max population the named categories are drawn from. This is
+        the full pool the size-matched random control samples from.
+        """
+        exclude = set(exclude)
+        pool = [(tf, self.phase_score(tf, phase)) for tf in self.series
+                if tf not in exclude]
+        pool = [(tf, s) for tf, s in pool if not np.isnan(s) and s >= min_score]
+        return sorted(pool, key=lambda kv: kv[1], reverse=True)
+
+    def random_tfs(self, phase, k=5, exclude=(), rng=None, min_score=0.0):
+        """``k`` random ``(TF, score)`` controls drawn from TFs scored in ``phase``.
+
+        Size-matched random control for one phase: samples (without replacement) from
+        :meth:`phase_pool` (every TF with a non-NaN per-phase binding score at or above
+        ``min_score`` and not in ``exclude``, so the control never overlaps the named
+        categories). Returns fewer than ``k`` only when the eligible pool is smaller,
+        sorted by descending score for display. Pass a seeded ``numpy.random.Generator``
+        as ``rng`` (and reuse it across phases) for reproducible draws.
+        """
+        rng = np.random.default_rng() if rng is None else rng
+        pool = self.phase_pool(phase, exclude=exclude, min_score=min_score)
+        if len(pool) > k:
+            chosen = rng.choice(len(pool), size=k, replace=False)
+            pool = [pool[int(i)] for i in chosen]
+        return sorted(pool, key=lambda kv: kv[1], reverse=True)
+
+    def top_tfs_table(self, category_tfs, top_k=5, exclusive=False,
+                      random_control=False, control_name='Random', random_state=None):
         """Long table of the top-``top_k`` TFs per (phase, category).
 
         ``category_tfs`` maps each category name to its TF universe (an iterable of
-        TF names; pass :meth:`tfs_from_links` output for link sets). Returns a
-        DataFrame with columns ``phase, category, rank, TF, binding_score``.
+        TF names; pass :meth:`tfs_from_links` output for link sets). When
+        ``exclusive=True`` the categories are first made mutually exclusive via
+        :meth:`disjoint_categories` (TFs shared across categories are dropped from
+        all of them). When ``random_control=True`` an extra ``control_name`` category
+        is added per phase: ``top_k`` random TFs (size-matched), drawn via
+        :meth:`random_tfs` from TFs scored in that phase but absent from every named
+        category, for a binding-strength baseline. ``random_state`` seeds the draw.
+        Returns a DataFrame with columns ``phase, category, rank, TF, binding_score``.
         """
+        exclude = {tf for tfs in category_tfs.values() for tf in tfs}
+        if exclusive:
+            category_tfs = self.disjoint_categories(category_tfs)
+        rng = np.random.default_rng(random_state)
         rows = []
         for phase in range(1, self.n_phases + 1):
             for cat, tfs in category_tfs.items():
                 for rank, (tf, score) in enumerate(self.rank_tfs(tfs, phase)[:top_k], 1):
                     rows.append({'phase': phase, 'category': cat, 'rank': rank,
+                                 'TF': tf, 'binding_score': score})
+            if random_control:
+                for rank, (tf, score) in enumerate(
+                        self.random_tfs(phase, k=top_k, exclude=exclude, rng=rng), 1):
+                    rows.append({'phase': phase, 'category': control_name, 'rank': rank,
                                  'TF': tf, 'binding_score': score})
         return pd.DataFrame(rows)
 
@@ -1026,7 +1121,8 @@ class BindingPhases(RegulatoryPhases):
         levels = np.linspace(0.85, 0.35, len(tfs))
         return {tf: to_hex(cmap(level)) for tf, level in zip(tfs, levels)}
 
-    def categories_by_phase(self, category_tfs, top_k=5, category_cmaps=None):
+    def categories_by_phase(self, category_tfs, top_k=5, category_cmaps=None,
+                            exclusive=False):
         """``{phase: {category: {TF: color}}}`` of the top-``top_k`` TFs per (phase, category).
 
         Phases are this lineage's differentiation windows (PB: 3, GC: 2); each phase
@@ -1037,8 +1133,11 @@ class BindingPhases(RegulatoryPhases):
         binding score) to lightest. This drives the per-phase **box** view
         (:meth:`plot_box`); continuous binding/OCR curves over pseudotime are a
         separate concern handled by ``SmoothedCurvesChromatin`` in the
-        ``pseudotime_curves`` module.
+        ``pseudotime_curves`` module. When ``exclusive=True`` the categories are
+        first made mutually exclusive via :meth:`disjoint_categories`.
         """
+        if exclusive:
+            category_tfs = self.disjoint_categories(category_tfs)
         cmaps = self._resolve_cmaps(category_tfs, category_cmaps)
         return {
             phase: {cat: self._shade(self.top_tfs(tfs, phase, top_k=top_k), cmaps[cat])
@@ -1048,7 +1147,9 @@ class BindingPhases(RegulatoryPhases):
 
     def plot_box(self, category_tfs, top_k=5, figsize=(8, 6),
                  ylabel='TF binding score (in-phase max)', category_cmaps=None,
-                 annotate=False):
+                 annotate=False, exclusive=False,
+                 random_control=False, control_name='Random', random_state=None,
+                 control_cmap='Greys', violin=False, violin_width=1.6):
         """Per-phase box plot of the top-``top_k`` TFs' binding scores, grouped by category.
 
         One cluster of boxes per phase of this lineage; within each cluster one box
@@ -1059,12 +1160,40 @@ class BindingPhases(RegulatoryPhases):
 
         Continuous binding-score / OCR curves over pseudotime are *not* drawn here --
         use ``SmoothedCurvesChromatin`` in the ``pseudotime_curves`` module for those.
+        When ``exclusive=True`` the categories are first made mutually exclusive via
+        :meth:`disjoint_categories` (TFs shared across categories are dropped). When
+        ``random_control=True`` an extra ``control_name`` box (coloured ``control_cmap``)
+        is drawn per phase from ``top_k`` size-matched random TFs scored in that phase
+        (seeded by ``random_state``), as a binding-strength baseline.
+
+        When ``violin=True`` a translucent violin of the top half (by score) of each
+        *named* category's in-phase distribution is drawn behind its box; the box/
+        scatter/annotations still show only the top-``top_k``.
+        The random control stays box-only (its size-matched sample is the baseline; a
+        violin of the whole pool behind it would be redundant). ``violin_width`` scales
+        the violin width relative to the per-category slot.
         """
-        table = self.top_tfs_table(category_tfs, top_k=top_k)
+        table = self.top_tfs_table(category_tfs, top_k=top_k, exclusive=exclusive,
+                                   random_control=random_control,
+                                   control_name=control_name, random_state=random_state)
         phases = list(range(1, self.n_phases + 1))
-        cats = list(category_tfs)
+        cats = list(category_tfs) + ([control_name] if random_control else [])
         cmaps = self._resolve_cmaps(category_tfs, category_cmaps)
+        if random_control:
+            cmaps = {**cmaps, control_name: control_cmap}
         colors = [to_hex(plt.get_cmap(cmaps[c])(0.6)) for c in cats]
+
+        # top-half in-phase distribution behind each NAMED-category box (upper 50% of
+        # the universe by score, not just top_k). The random control is box-only -- a
+        # violin of the whole pool behind 5 arbitrary draws would just be redundant.
+        full = {}
+        if violin:
+            vcats = self.disjoint_categories(category_tfs) if exclusive else category_tfs
+            for p in phases:
+                for cat, tfs in vcats.items():
+                    scores = [s for _, s in self.rank_tfs(tfs, p)]  # descending
+                    half = (len(scores) + 1) // 2  # top half (upper by score)
+                    full[(p, cat)] = np.array(scores[:half], dtype=float)
 
         fig, ax = plt.subplots(figsize=figsize)
         ax.spines['top'].set_visible(False)
@@ -1080,6 +1209,22 @@ class BindingPhases(RegulatoryPhases):
                 positions.append(pi + offset)
                 data.append(sub['binding_score'].values)
                 names.append(list(sub['TF']))
+            if violin:
+                vsets, vpos = [], []
+                for pos, p in zip(positions, phases):
+                    d = full.get((p, cat), np.empty(0))
+                    if d.size > 1:
+                        vsets.append(d)
+                        vpos.append(pos)
+                if vsets:
+                    parts = ax.violinplot(vsets, positions=vpos,
+                                          widths=width * violin_width,
+                                          showextrema=False)
+                    for body in parts['bodies']:
+                        body.set_facecolor(colors[ci])
+                        body.set_edgecolor('none')
+                        body.set_alpha(0.25)
+                        body.set_zorder(0)
             bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
                             patch_artist=True, showfliers=False,
                             medianprops=dict(color='black'))
