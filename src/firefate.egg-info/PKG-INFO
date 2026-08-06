@@ -1,7 +1,7 @@
 Metadata-Version: 2.4
 Name: firefate
-Version: 0.1.0
-Summary: FIREFate: Functional and Interpretable Regulatory Encoding of Fate determination
+Version: 0.0.1
+Summary: FIREFate: Functional and Interpretable Regulatory Encoding of cell Fate decisions
 Author: Akanksha Sachan
 License: MIT
 Requires-Python: >=3.10

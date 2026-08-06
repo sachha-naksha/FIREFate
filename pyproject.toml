@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "firefate"
-version = "0.1.0"
-description = "FIREFate: Functional and Interpretable Regulatory Encoding of Fate determination"
+version = "0.0.1"
+description = "FIREFate: Functional and Interpretable Regulatory Encoding of cell Fate decisions"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
