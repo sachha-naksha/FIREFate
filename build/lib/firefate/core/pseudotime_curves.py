@@ -4,7 +4,7 @@ import multiprocessing as mp
 from multiprocessing import Pool, cpu_count
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from functools import partial
 from typing import List, Dict, Tuple, Optional, Union
 
@@ -24,6 +24,7 @@ from scipy.stats import hypergeom
 from scipy.ndimage import gaussian_filter1d
 from tqdm import tqdm
 
+from firefate.core.stat_extensions import lcpm_tf
 from firefate.utils.custom import *
 
 
@@ -51,7 +52,7 @@ class SmoothedCurvesGRN:
         self.mode = mode
     
     def get_smoothed_curves(
-        self, mode=None
+        self, mode=None, n_jobs=None
     ) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Compute expression (lcpm) and regulation (ltarget_count) curves over pseudotime
@@ -63,60 +64,167 @@ class SmoothedCurvesGRN:
             ``(curves_dataframe, pseudotime_series)``.
         """
 
-        # sample equispaced points and instantiate smoothing function    
+        # sample equispaced points and instantiate smoothing function
         pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
-        
+
         # Use provided mode or fall back to instance mode
         mode_to_use = mode if mode is not None else self.mode
 
+        # Pseudo time values (x axis). First gene's pseudotime is returned as all
+        # genes share the same pseudotime over the pseudo-bulked cells in the window.
+        stat1_x = stat.pseudotime(self.dictys_dynamic_object, pts)
+        dx = pd.Series(stat1_x.compute(pts)[0])
+
         if mode_to_use == "regulation":
-            # Log number of targets
-            stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
-            stat1_netbin = stat.fbinarize(stat1_net, sparsity=self.sparsity)
-            stat1_y = stat.flnneighbor(stat1_netbin)
-        elif mode_to_use == "weighted_regulation":
+            # Log number of targets. Parallel, NaN-aware reimplementation of the
+            # dictys chain flnneighbor(fbinarize(fsmooth(net), sparsity)); the
+            # per-point sparsity threshold + outdegree dominate runtime and are
+            # independent across points, so they are spread over CPU cores.
+            dy = self._regulation_curves_parallel(pts, fsmooth, n_jobs=n_jobs)
+            return dy, dx
+
+        if mode_to_use == "weighted_regulation":
             # Log weighted outdegree
             stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
             stat1_y = stat.flnneighbor(stat1_net, weighted_sparsity=self.sparsity)
         elif mode_to_use == "tf_expression":
-            stat1_y = fsmooth(stat.lcpm_tf(self.dictys_dynamic_object, cut=0))
+            stat1_y = fsmooth(lcpm_tf(self.dictys_dynamic_object, cut=0))
         elif mode_to_use == "expression":
             stat1_y = fsmooth(stat.lcpm(self.dictys_dynamic_object, cut=0))
         else:
             raise ValueError(f"Unknown mode {mode_to_use}.")
-            
-        # Pseudo time values (x axis)
-        stat1_x = stat.pseudotime(self.dictys_dynamic_object, pts)
-        tmp_y = stat1_y.compute(pts)
-        tmp_x = stat1_x.compute(pts)
-        dy = pd.DataFrame(tmp_y, index=stat1_y.names[0])
-        dx = pd.Series(tmp_x[0])  # first gene's pseudotime is returned as all genes have the same pseudotime over the pseudo-bulked cells in the window
-        
+
+        dy = pd.DataFrame(stat1_y.compute(pts), index=stat1_y.names[0])
         return dy, dx
-    
+
+    def _regulation_curves_parallel(self, pts, fsmooth, n_jobs=None) -> pd.DataFrame:
+        """Parallel equivalent of ``flnneighbor(fbinarize(fsmooth(net), sparsity))``.
+
+        Reproduces the dictys ``regulation`` chain exactly (verified bit-for-bit)
+        but replaces two bottlenecks:
+
+        * dictys' Gaussian smoothing rebuilds full-size ``isnan``/``nan_to_num``
+          temporaries on every call; here the smoothing is a single NaN-aware
+          matmul (``point.smoothen`` with ``nan='ignore'`` semantics).
+        * the per-point top-``k`` sparsity threshold + outdegree run in a serial
+          Python loop in ``stat.fbinarize``; each pseudotime point is independent,
+          so they are spread across ``n_jobs`` threads (the heavy NumPy ops release
+          the GIL and share the smoothed array without copying).
+
+        Returns ``(n_regulator, n_point)`` DataFrame of ``log2(outdegree + 1)``.
+        """
+        if n_jobs is None:
+            n_jobs = min(16, cpu_count())
+
+        # Building the smoothing stat precomputes the node-filtered network array.
+        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
+        fs = stat1_net.func_smooth
+        pt = fs.func.__self__            # node-filtered dictys.traj.point
+        data = fs.args[0]                # (n_reg, n_target, n_node)
+        radius = fs.args[1]
+        w = pt.weight_conv(pts, radius)  # (n_node, n_pts), column-normalised Gaussian
+
+        n_reg, n_target, _ = data.shape
+        n_pts = len(pts)
+        # Number of strongest edges kept per point (matches stat.fbinarize).
+        k = int(self.sparsity * n_reg * n_target)
+
+        # Gaussian smoothing, NaN-aware (mirrors point.smoothen nan='ignore'):
+        # nan entries contribute zero weight and a point is nan only if every
+        # contributing node is nan. The no-nan branch is the identical result.
+        if np.isnan(data).any():
+            mask = (~np.isnan(data)).astype(data.dtype)
+            den = mask @ w
+            smoothed = (np.nan_to_num(data) @ w) / (den + 1e-300)
+            smoothed[den == 0] = np.nan
+        else:
+            smoothed = data @ w          # (n_reg, n_target, n_pts), BLAS-threaded
+        np.abs(smoothed, out=smoothed)   # signed binarisation ranks by |weight|
+
+        # Per-point: keep top-k edges, count outdegree per regulator, log2(.+1).
+        dy = np.empty((n_reg, n_pts), dtype=np.float64)
+
+        def _fill(cols):
+            for j in cols:
+                arr = smoothed[:, :, j]
+                cut = np.partition(arr.ravel(), -k)[-k]
+                dy[:, j] = np.log2((arr >= cut).sum(axis=1) + 1.0)
+
+        col_chunks = [c.tolist() for c in np.array_split(np.arange(n_pts), n_jobs) if len(c)]
+        with ThreadPoolExecutor(max_workers=n_jobs) as ex:
+            list(ex.map(_fill, col_chunks))
+
+        return pd.DataFrame(dy, index=stat1_net.names[0])
+
+    def _subnetwork_curves(self, TF_indices, target_indices, varname):
+        """Smoothed signed network for the given TF/target indices only.
+
+        Computes just the requested sub-network instead of smoothing the whole
+        GRN and slicing afterwards: the per-node network array is sliced to the
+        queried TFs/targets *before* the Gaussian smoothing matmul, so the full
+        ``(n_reg, n_target, n_pts)`` smoothed network is never materialised. The
+        per-node data and weights are exactly those used by
+        :meth:`_regulation_curves_parallel`; the signed smoothing here is the
+        un-binarised version of that path (no ``abs``/top-``k``).
+
+        Returns ``(subnetworks, dtime)`` with ``subnetworks`` of shape
+        ``(len(TF_indices), len(target_indices), n_pts)``.
+        """
+        # sample evenly spaced points along the trajectory
+        pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
+        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object, varname=varname))
+        fs = stat1_net.func_smooth
+        pt = fs.func.__self__            # node-filtered dictys.traj.point
+        data = fs.args[0]                # (n_reg, n_target, n_node), per-node network
+        radius = fs.args[1]
+        w = pt.weight_conv(pts, radius)  # (n_node, n_pts), column-normalised Gaussian
+
+        # slice to the queried TFs/targets before smoothing
+        sub = data[np.ix_(TF_indices, target_indices, range(data.shape[2]))]
+
+        # Gaussian smoothing, NaN-aware (mirrors point.smoothen nan='ignore'); signed
+        # -- these are the raw beta coefficients, so no abs/binarisation.
+        if np.isnan(sub).any():
+            mask = (~np.isnan(sub)).astype(sub.dtype)
+            den = mask @ w
+            subnetworks = (np.nan_to_num(sub) @ w) / (den + 1e-300)
+            subnetworks[den == 0] = np.nan
+        else:
+            subnetworks = sub @ w        # (n_tf, n_target, n_pts)
+
+        dtime = pd.Series(stat.pseudotime(self.dictys_dynamic_object, pts).compute(pts)[0])
+        return subnetworks, dtime
+
     def get_beta_curves(self, specified_links: list, varname: str = 'w_in'):
         """
-        get beta curves for specified links; 
+        get beta curves for specified links;
         varname: 'w_in' for normalized total effect network, 'w_n' for normalized direct effect network, 'w' for non-normalized direct effect network
         """
-        
+
         # getting the TF and target indices for querying the network
         tf_list = list(set([link[0] for link in specified_links]))
         TF_indices, _, missing_tfs = get_tf_indices(self.dictys_dynamic_object, tf_list)
         target_list = list(set([link[1] for link in specified_links]))
         target_indices = get_gene_indices(self.dictys_dynamic_object, target_list)
 
-        # sample evenly spaced points along the trajectory
-        pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
-        # get the total effect (direct + indirect) network
-        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object,varname=varname))
-        stat1_x=stat.pseudotime(self.dictys_dynamic_object,pts)
-        dnet = stat1_net.compute(pts)
-        dtime = pd.Series(stat1_x.compute(pts)[0])
-        subnetworks = dnet[np.ix_(TF_indices, target_indices, range(dnet.shape[2]))]
-        
-        # create multi-index tuples for all combinations of TF-target pairs
-        index_tuples = [(tf, target) for tf in tf_list for target in target_list]
+        # compute only the queried sub-network (the full GRN is never smoothed)
+        subnetworks, dtime = self._subnetwork_curves(TF_indices, target_indices, varname)
+
+        # _subnetwork_curves keeps only the TFs/targets present in the network, so
+        # build the index from the same found TFs/targets (in TF_indices /
+        # target_indices order) to stay aligned with the data; otherwise the missing
+        # genes make the index longer than the reshaped array.
+        ndict = self.dictys_dynamic_object.ndict
+        missing_tf_set = set(missing_tfs)
+        found_tfs = [tf for tf in tf_list if tf not in missing_tf_set]
+        found_targets = [target for target in target_list if target in ndict]
+        n_missing_targets = len(target_list) - len(found_targets)
+        if missing_tfs or n_missing_targets:
+            print(f"get_beta_curves: skipping {len(missing_tfs)} TF(s) and "
+                  f"{n_missing_targets} target(s) not present in the network.")
+
+        # create multi-index tuples for all found TF-target combinations
+        index_tuples = [(tf, target) for tf in found_tfs for target in found_targets]
         multi_index = pd.MultiIndex.from_tuples(index_tuples, names=['TF', 'Target'])
 
         # reshape the subnetworks array to 2D (pairs × time points)
@@ -343,6 +451,54 @@ class SmoothedCurvesGRN:
         )
         return df
 
+    # Map the internal global-activity classes to the four wave-pattern names.
+    WAVE_PATTERN_NAMES = {
+        "Cumulative": "up",
+        "Reductive": "down",
+        "Bell wave": "transiently_up",
+        "U-shaped": "transiently_down",
+    }
+
+    def classify_wave_patterns(self, dx, dy, tf_list=None):
+        """
+        Classify each TF's curve into one of four wave patterns:
+        ``up``, ``down``, ``transiently_up``, ``transiently_down``.
+
+        The up/down vs transient decision compares z-scored terminal and
+        transient logFC across the curves in ``dy`` (see
+        ``classify_tf_global_activity``). Pass the full ``dy`` (all TFs) for a
+        stable classification; ``tf_list`` only filters the returned rows.
+
+        Parameters
+        ----------
+        dx : ndarray
+            Pseudotime values.
+        dy : pandas.DataFrame
+            Smoothed curves, indexed by TF name (e.g. from
+            ``get_smoothed_curves(mode="regulation")``).
+        tf_list : list of str, optional
+            TFs to keep in the output. If None, all TFs are returned.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Indexed by TF, with a ``trajectory`` column and a ``wave_pattern``
+            column (one of the four categories), alongside the diagnostic
+            columns from ``classify_tf_global_activity``.
+        """
+        df = self.classify_tf_global_activity(
+            dx, dy.values if hasattr(dy, "values") else dy,
+            "terminal_logfc", "transient_logfc",
+        )
+        df.index = dy.index
+        df["wave_pattern"] = df["tf_class"].map(self.WAVE_PATTERN_NAMES)
+        df["trajectory"] = [self.trajectory_range] * len(df)
+
+        if tf_list is not None:
+            df = df.loc[df.index.intersection(tf_list)]
+
+        return df
+
     def get_top_k_tfs_by_class(self, dx, dy, k=20):
         """
         get top k tfs from each class based on their relevant ranks
@@ -390,14 +546,16 @@ class SmoothedCurvesChromatin:
     across genomic windows and pseudotime trajectories.
     """
 
-    def __init__(self, tfs: List[str], base_path: str):
+    def __init__(self, tfs: Optional[List[str]], base_path: str):
         """
         Initialize the chromatin accessibility data analyzer.
 
-        Parameters:
-        -----------
-        tfs : list
-            List of Transcription Factors to query.
+        Parameters
+        ----------
+        tfs : list of str, or None
+            Transcription factors to query. If None, all TFs found across the
+            binding files will be loaded; the union is materialized as `self.tfs`
+            after `extract_data()` runs.
         base_path : str
             Base path to the binding.tsv.gz files (e.g., 'path/to/tmp_dynamic').
         """
@@ -420,42 +578,61 @@ class SmoothedCurvesChromatin:
         self.series_gc: Dict[str, np.ndarray] = {}
 
     @staticmethod
-    def _process_single_window(i: int, tfs: List[str], base_path: str) -> Tuple[int, Dict, Dict]:
+    def _process_single_window(
+        i: int,
+        tfs: Optional[List[str]],
+        base_path: str,
+    ) -> Tuple[int, Dict[str, float], Dict[str, float]]:
         """
-        Static worker method for multiprocessing. 
-        Must be static to be pickleable by multiprocessing.Pool.
+        Static worker for multiprocessing.
+
+        If `tfs` is None, returns scores/counts for every TF present in this
+        window's file. If `tfs` is a list, behaves as before: returns NaN/0 for
+        TFs absent from the file.
         """
         try:
-            # Read the binding file
-            file_path = f'{base_path}/Subset{i}/binding.tsv.gz'
-            df = pd.read_csv(file_path, sep='\t', compression='gzip')
-            
-            # Efficient string parsing
-            if 'loc' in df.columns:
-                df[['chr', 'start', 'end']] = df['loc'].str.split(':', expand=True)
-            
-            window_scores = {}
-            window_counts = {}
-            
-            # Group once to avoid repeated filtering of TFs
-            grouped = df.groupby('TF')
-            
-            for tf in tfs:
+            file_path = f"{base_path}/Subset{i}/binding.tsv.gz"
+            df = pd.read_csv(file_path, sep="\t", compression="gzip")
+
+            if "loc" in df.columns:
+                df[["chr", "start", "end"]] = df["loc"].str.split(":", expand=True)
+
+            grouped = df.groupby("TF")
+
+            # Decide which TFs this worker should emit
+            if tfs is None:
+                tfs_to_process = list(grouped.groups.keys())
+                return_defaults_for_missing = False
+            else:
+                tfs_to_process = tfs
+                return_defaults_for_missing = True
+
+            window_scores: Dict[str, float] = {}
+            window_counts: Dict[str, float] = {}
+
+            for tf in tfs_to_process:
                 if tf in grouped.groups:
                     tf_df = grouped.get_group(tf)
-                    # Mean score across chromosomes
-                    window_scores[tf] = tf_df.groupby('chr').agg({'score': 'mean'}).mean().values[0]
-                    # Count OCRs across chromosomes
-                    window_counts[tf] = tf_df.groupby('chr').agg({'score': 'count'}).mean().values[0]
-                else:
-                    window_scores[tf] = float('nan')
+                    window_scores[tf] = (
+                        tf_df.groupby("chr").agg({"score": "mean"}).mean().values[0]
+                    )
+                    window_counts[tf] = (
+                        tf_df.groupby("chr").agg({"score": "count"}).mean().values[0]
+                    )
+                elif return_defaults_for_missing:
+                    window_scores[tf] = float("nan")
                     window_counts[tf] = 0
-            
+                # if tfs is None and TF not in grouped: just skip — won't happen
+                # since tfs_to_process came from grouped.groups in that branch.
+
             return (i, window_scores, window_counts)
-        
-        except Exception as e:
-            # Silent fail for individual windows to keep process alive, but return safe defaults
-            return (i, {tf: float('nan') for tf in tfs}, {tf: 0 for tf in tfs})
+
+        except Exception:
+            # Safe defaults: unknown TFs in the None case → empty dicts;
+            # the union step will simply not see this window's contributions.
+            if tfs is None:
+                return (i, {}, {})
+            return (i, {tf: float("nan") for tf in tfs}, {tf: 0 for tf in tfs})
 
     @staticmethod
     def _to_float(v):
@@ -476,53 +653,81 @@ class SmoothedCurvesChromatin:
     def extract_data(self, n_windows: int = 194, n_processes: int = None):
         """
         Multiprocess the extraction of TF binding data across all windows.
-        Populates self.raw_scores and self.raw_counts.
+
+        If `self.tfs` is None, discovers the full union of TFs present across
+        all window files and stores it as `self.tfs` on completion.
+        Populates `self.raw_scores` and `self.raw_counts`.
         """
-        # Initialize result dictionaries
-        self.raw_scores = {tf: [None] * n_windows for tf in self.tfs}
-        self.raw_counts = {tf: [None] * n_windows for tf in self.tfs}
-        
         if n_processes is None:
             n_processes = max(1, cpu_count() - 1)
-        
+
         print(f"Processing {n_windows} windows using {n_processes} processes...")
-        
-        # Prepare arguments for the static worker
+
         process_func = partial(
-            SmoothedCurvesChromatin._process_single_window, 
-            tfs=self.tfs, 
-            base_path=self.base_path
+            SmoothedCurvesChromatin._process_single_window,
+            tfs=self.tfs,                   # None propagates to workers
+            base_path=self.base_path,
         )
-        
+
         with Pool(processes=n_processes) as pool:
             results = list(tqdm(
                 pool.imap(process_func, range(1, n_windows + 1)),
                 total=n_windows,
-                desc="Extracting Binding Data"
+                desc="Extracting Binding Data",
             ))
-        
-        # Collect results
+
+        # Fail loudly if no window produced any real data. The worker swallows
+        # per-window errors (e.g. a missing binding.tsv.gz) into empty/all-NaN
+        # results, which would otherwise yield empty series and surface as a
+        # confusing error several steps downstream. (v == v is False only for NaN.)
+        got_data = any(
+            any(v == v for v in w_scores.values())
+            for _, w_scores, _ in results
+        )
+        if not got_data:
+            raise FileNotFoundError(
+                f"No binding data extracted from any of {n_windows} windows. "
+                f"Expected per-window files like "
+                f"'{self.base_path}/Subset1/binding.tsv.gz'. Check that base_path is "
+                f"correct and that the binding.tsv.gz files exist."
+            )
+
+        # If tfs was None, resolve the union of TFs seen across all windows.
+        if self.tfs is None:
+            all_tfs = set()
+            for _, w_scores, _ in results:
+                all_tfs.update(w_scores.keys())
+            self.tfs = sorted(all_tfs)
+            print(f"Discovered {len(self.tfs)} TFs across all windows.")
+
+        # Allocate storage with sentinels (NaN for score, 0 for count) and fill.
+        self.raw_scores = {tf: [np.nan] * n_windows for tf in self.tfs}
+        self.raw_counts = {tf: [0] * n_windows for tf in self.tfs}
+
         for window_idx, w_scores, w_counts in results:
-            # Adjust 1-based index to 0-based list index
             idx = window_idx - 1
-            if 0 <= idx < n_windows:
-                for tf in self.tfs:
-                    self.raw_scores[tf][idx] = w_scores.get(tf, np.nan)
+            if not (0 <= idx < n_windows):
+                continue
+            for tf in self.tfs:
+                if tf in w_scores:
+                    self.raw_scores[tf][idx] = w_scores[tf]
                     self.raw_counts[tf][idx] = w_counts.get(tf, 0)
-        
+                # else: leave the NaN/0 sentinel in place
+
         print("Extraction complete.")
 
     # ------------------------------------------------------------------
     # Trajectory & Processing Methods
     # ------------------------------------------------------------------
 
-    def set_trajectory_info(self, 
-                            pb_indices: List[int], 
-                            gc_indices: List[int], 
-                            window_pseudotimes: Union[List, np.ndarray]):
+    def set_trajectory_info(self,
+                            pb_indices: List[int],
+                            gc_indices: List[int],
+                            window_pseudotimes: Union[List, np.ndarray],
+                            gc_window_pseudotimes: Optional[Union[List, np.ndarray]] = None):
         """
         Register trajectory indices and pseudotime values.
-        
+
         Parameters:
         -----------
         pb_indices : List[int]
@@ -530,15 +735,27 @@ class SmoothedCurvesChromatin:
         gc_indices : List[int]
             0-based indices of windows belonging to the GC trajectory.
         window_pseudotimes : array-like
-            Pseudotime value for every window (index corresponds to window ID).
+            Pseudotime per window ID in the PB-branch alignment frame (e.g.
+            ``AlignTimeScales(..., (0, 2)).pseudotime_of_windows()``). Used for the
+            PB branch, and for the GC branch too unless ``gc_window_pseudotimes``
+            is given.
+        gc_window_pseudotimes : array-like, optional
+            Pseudotime per window ID in the GC-branch alignment frame (e.g.
+            ``AlignTimeScales(..., (0, 3)).pseudotime_of_windows()``). Provide this
+            when the two branches are aligned separately so the GC windows land on
+            the GC pseudotime axis that the GC phase switches are defined in;
+            otherwise the GC windows inherit the PB frame and won't line up with
+            GC-frame switches. Defaults to ``window_pseudotimes``.
         """
         self.pb_indices = pb_indices
         self.gc_indices = gc_indices
         self.window_pseudotimes = np.array(window_pseudotimes)
-        
-        # Map indices to pseudotimes immediately
+        gc_window_pseudotimes = (self.window_pseudotimes if gc_window_pseudotimes is None
+                                 else np.array(gc_window_pseudotimes))
+
+        # Map indices to pseudotimes immediately (each branch in its own frame)
         self.pb_pseudotime = self.window_pseudotimes[self.pb_indices]
-        self.gc_pseudotime = self.window_pseudotimes[self.gc_indices]
+        self.gc_pseudotime = gc_window_pseudotimes[self.gc_indices]
 
     def process_dynamics(self, metric: str = 'score', smooth_sigma: float = 2.0, relative: bool = False):
         """

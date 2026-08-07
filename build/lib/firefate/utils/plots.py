@@ -1,4 +1,8 @@
-"""Episodic enrichment and TF–target heatmap plotting (migrated from ``episode_plots``)."""
+"""Episodic enrichment and TF–target heatmap plotting (migrated from ``episode_plots``).
+
+Also provides interactive 3D regulatory-force landscape visualizations
+(``plot_force_landscape`` and friends) built on Plotly.
+"""
 
 import numpy as np
 import pandas as pd
@@ -7,6 +11,8 @@ from scipy.cluster.hierarchy import linkage, dendrogram, leaves_list
 from scipy.spatial.distance import squareform
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 def sort_tfs_by_gene_similarity(tf_genes_dict, method='jaccard_hierarchical', return_linkage=False):
     """Sorts TFs based on gene similarity using Jaccard similarity and hierarchical clustering."""
@@ -621,3 +627,445 @@ def plot_tf_target_episodic_heatmap(
         plt.show()
 
     return fig, ax
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 3D regulatory force landscape (Plotly)
+# =============================================================================
+# Visualizes the regulatory force as a surface over (TF expression, beta) space,
+# with actual TF–target link trajectories traced as 3D curves on the landscape.
+#
+# Force definition (mirrors SmoothedCurvesGRN.calculate_force_curves):
+#     force = sign(β) · exp( log₁₀(|β| + ε) + log₁₀(TF_expr + ε) )
+# ─────────────────────────────────────────────────────────────────────────────
+
+EPSILON = 1e-10
+
+
+def _force_fn(tf_expr, beta):
+    """Compute force = sign(β) · exp(log₁₀(|β|+ε) + log₁₀(tf+ε))."""
+    log_beta = np.log10(np.abs(beta) + EPSILON)
+    log_tf   = np.log10(np.abs(tf_expr) + EPSILON)
+    return np.sign(beta) * np.exp(log_beta + log_tf)
+
+
+def _build_surface(
+    tf_range: tuple,
+    beta_range: tuple,
+    sign: int = 1,
+    resolution: int = 120,
+):
+    """
+    Create a meshgrid surface of the force function for a given sign of β.
+
+    Parameters
+    ----------
+    tf_range : (min, max) of TF expression values (log CPM)
+    beta_range : (min, max) of |β| values
+    sign : +1 for activating surface, -1 for repressing surface
+    resolution : grid density
+    """
+    tf_vals   = np.linspace(tf_range[0], tf_range[1], resolution)
+    beta_vals = np.linspace(beta_range[0], beta_range[1], resolution)
+    TF, BETA  = np.meshgrid(tf_vals, beta_vals)
+    FORCE     = _force_fn(TF, sign * BETA)   # sign determines activation / repression
+    return TF, BETA * sign, FORCE
+
+
+def plot_force_landscape(
+    beta_curves: pd.DataFrame,
+    regulon_tf_expression: pd.DataFrame,
+    force_curves: pd.DataFrame,
+    dtime: pd.Series,
+    links_to_highlight: list = None,
+    surface_opacity: float = 0.35,
+    surface_resolution: int = 100,
+    line_width: float = 5,
+    marker_size: float = 3,
+    colorscale_positive: str = "Purples",
+    colorscale_negative: str = "Blues",
+    title: str = "Regulatory Force Landscape",
+    width: int = 1000,
+    height: int = 750,
+    show_surface: bool = True,
+    camera: dict = None,
+):
+    """
+    Build an interactive 3D Plotly figure of the force landscape.
+
+    Parameters
+    ----------
+    beta_curves : pd.DataFrame
+        Multi-indexed (TF, Target) × time_points. Edge strengths.
+    regulon_tf_expression : pd.DataFrame
+        TF × time_points. Log-CPM expression of each TF, already broadcast-
+        ready (one row per unique TF present in beta_curves level 0).
+    force_curves : pd.DataFrame
+        Multi-indexed (TF, Target) × time_points. Pre-computed forces.
+    dtime : pd.Series
+        Pseudotime values for each time point.
+    links_to_highlight : list of (TF, Target) tuples, optional
+        Subset of links to draw. Default: all links.
+    show_surface : bool
+        Whether to render the analytical force surface behind the curves.
+    """
+
+    fig = go.Figure()
+
+    # ── resolve links ────────────────────────────────────────────────────
+    all_links = beta_curves.index.tolist()
+    if links_to_highlight is None:
+        links_to_highlight = all_links
+
+    # ── data ranges for surface ──────────────────────────────────────────
+    # Build the broadcast TF expression aligned to beta_curves index
+    targets_per_tf = beta_curves.index.get_level_values(0).value_counts()
+    expanded_tf = pd.DataFrame(
+        np.repeat(regulon_tf_expression.values,
+                  [targets_per_tf[tf] for tf in regulon_tf_expression.index], axis=0),
+        index=beta_curves.index,
+        columns=beta_curves.columns,
+    )
+
+    tf_vals_all   = expanded_tf.loc[links_to_highlight].values.ravel()
+    beta_vals_all = beta_curves.loc[links_to_highlight].values.ravel()
+
+    tf_min, tf_max     = np.nanmin(tf_vals_all), np.nanmax(tf_vals_all)
+    beta_min, beta_max = np.nanmin(beta_vals_all), np.nanmax(beta_vals_all)
+    tf_pad   = (tf_max - tf_min) * 0.1
+    beta_pad = (beta_max - beta_min) * 0.1
+
+    # ── analytical surface(s) ────────────────────────────────────────────
+    if show_surface:
+        # Positive-β surface (activation half)
+        if beta_max > 0:
+            TF_p, BETA_p, FORCE_p = _build_surface(
+                tf_range=(tf_min - tf_pad, tf_max + tf_pad),
+                beta_range=(1e-6, beta_max + beta_pad),
+                sign=1,
+                resolution=surface_resolution,
+            )
+            fig.add_trace(go.Surface(
+                x=TF_p, y=BETA_p, z=FORCE_p,
+                colorscale=colorscale_positive,
+                opacity=surface_opacity,
+                showscale=False,
+                name="Activation surface",
+                hoverinfo="skip",
+            ))
+
+        # Negative-β surface (repression half)
+        if beta_min < 0:
+            TF_n, BETA_n, FORCE_n = _build_surface(
+                tf_range=(tf_min - tf_pad, tf_max + tf_pad),
+                beta_range=(1e-6, np.abs(beta_min) + beta_pad),
+                sign=-1,
+                resolution=surface_resolution,
+            )
+            fig.add_trace(go.Surface(
+                x=TF_n, y=BETA_n, z=FORCE_n,
+                colorscale=colorscale_negative,
+                opacity=surface_opacity,
+                showscale=False,
+                name="Repression surface",
+                hoverinfo="skip",
+            ))
+
+    # ── link trajectories ────────────────────────────────────────────────
+    # Build a qualitative colour palette
+    n_links = len(links_to_highlight)
+    cmap = _get_qualitative_colors(n_links)
+
+    for i, (tf, target) in enumerate(links_to_highlight):
+        if (tf, target) not in all_links:
+            continue
+
+        x = expanded_tf.loc[(tf, target)].values.astype(float)
+        y = beta_curves.loc[(tf, target)].values.astype(float)
+        z = force_curves.loc[(tf, target)].values.astype(float)
+        t = dtime.values.astype(float)
+
+        color = cmap[i % len(cmap)]
+
+        # Trajectory line
+        fig.add_trace(go.Scatter3d(
+            x=x, y=y, z=z,
+            mode="lines",
+            line=dict(color=color, width=line_width),
+            name=f"{tf} → {target}",
+            customdata=np.stack([t, x, y, z], axis=-1),
+            hovertemplate=(
+                "<b>%{fullData.name}</b><br>"
+                "pseudotime: %{customdata[0]:.3f}<br>"
+                "TF expr (lcpm): %{customdata[1]:.3f}<br>"
+                "β: %{customdata[2]:.5f}<br>"
+                "force: %{customdata[3]:.5f}"
+                "<extra></extra>"
+            ),
+        ))
+
+        # Start marker (early pseudotime)
+        fig.add_trace(go.Scatter3d(
+            x=[x[0]], y=[y[0]], z=[z[0]],
+            mode="markers",
+            marker=dict(size=marker_size + 3, color=color, symbol="diamond"),
+            showlegend=False,
+            hoverinfo="skip",
+        ))
+
+    # ── layout ───────────────────────────────────────────────────────────
+    default_camera = dict(
+        eye=dict(x=1.6, y=-1.6, z=0.9),
+        up=dict(x=0, y=0, z=1),
+    )
+
+    fig.update_layout(
+        title=dict(
+            text=title,
+            font=dict(size=20, family="Helvetica Neue, Arial"),
+            x=0.5,
+        ),
+        scene=dict(
+            xaxis=dict(
+                title=dict(text="TF Expression (log CPM)", font=dict(size=14)),
+                backgroundcolor="rgba(240,240,245,0.5)",
+                gridcolor="rgba(200,200,210,0.4)",
+                showbackground=True,
+            ),
+            yaxis=dict(
+                title=dict(text="β (edge strength)", font=dict(size=14)),
+                backgroundcolor="rgba(240,240,245,0.5)",
+                gridcolor="rgba(200,200,210,0.4)",
+                showbackground=True,
+            ),
+            zaxis=dict(
+                title=dict(text="Regulatory Force", font=dict(size=14)),
+                backgroundcolor="rgba(240,240,245,0.5)",
+                gridcolor="rgba(200,200,210,0.4)",
+                showbackground=True,
+            ),
+            camera=camera or default_camera,
+        ),
+        width=width,
+        height=height,
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        legend=dict(
+            font=dict(size=11),
+            itemsizing="constant",
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor="rgba(200,200,200,0.5)",
+            borderwidth=1,
+        ),
+        margin=dict(l=20, r=20, t=60, b=20),
+    )
+
+    return fig
+
+
+def plot_single_link_landscape(
+    tf_name: str,
+    target_name: str,
+    beta_curves: pd.DataFrame,
+    regulon_tf_expression: pd.DataFrame,
+    force_curves: pd.DataFrame,
+    dtime: pd.Series,
+    surface_resolution: int = 150,
+    colorscale: str = "Viridis",
+    width: int = 800,
+    height: int = 650,
+):
+    """
+    Focused 3D view of a single TF → Target link on its own force surface.
+    The trajectory is coloured by pseudotime.
+    """
+
+    # ── extract link data ────────────────────────────────────────────────
+    targets_per_tf = beta_curves.index.get_level_values(0).value_counts()
+    expanded_tf = pd.DataFrame(
+        np.repeat(regulon_tf_expression.values,
+                  [targets_per_tf[tf] for tf in regulon_tf_expression.index], axis=0),
+        index=beta_curves.index,
+        columns=beta_curves.columns,
+    )
+
+    x = expanded_tf.loc[(tf_name, target_name)].values.astype(float)
+    y = beta_curves.loc[(tf_name, target_name)].values.astype(float)
+    z = force_curves.loc[(tf_name, target_name)].values.astype(float)
+    t = dtime.values.astype(float)
+
+    # ── surface ──────────────────────────────────────────────────────────
+    tf_pad   = (x.max() - x.min()) * 0.25
+    beta_pad = (np.abs(y).max()) * 0.25
+    sign = 1 if np.mean(y) >= 0 else -1
+
+    TF_s, BETA_s, FORCE_s = _build_surface(
+        tf_range=(x.min() - tf_pad, x.max() + tf_pad),
+        beta_range=(1e-6, np.abs(y).max() + beta_pad),
+        sign=sign,
+        resolution=surface_resolution,
+    )
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Surface(
+        x=TF_s, y=BETA_s, z=FORCE_s,
+        colorscale="Purples" if sign > 0 else "Blues",
+        opacity=0.30,
+        showscale=False,
+        hoverinfo="skip",
+    ))
+
+    # ── trajectory coloured by pseudotime ────────────────────────────────
+    fig.add_trace(go.Scatter3d(
+        x=x, y=y, z=z,
+        mode="lines+markers",
+        line=dict(color=t, colorscale=colorscale, width=6),
+        marker=dict(size=2.5, color=t, colorscale=colorscale,
+                    colorbar=dict(title="Pseudotime", thickness=15, len=0.5)),
+        name=f"{tf_name} → {target_name}",
+        customdata=np.stack([t, x, y, z], axis=-1),
+        hovertemplate=(
+            f"<b>{tf_name} → {target_name}</b><br>"
+            "pseudotime: %{customdata[0]:.3f}<br>"
+            "TF expr: %{customdata[1]:.3f}<br>"
+            "β: %{customdata[2]:.5f}<br>"
+            "force: %{customdata[3]:.5f}"
+            "<extra></extra>"
+        ),
+    ))
+
+    # Start / end markers
+    fig.add_trace(go.Scatter3d(
+        x=[x[0]], y=[y[0]], z=[z[0]],
+        mode="markers",
+        marker=dict(size=7, color="limegreen", symbol="diamond",
+                    line=dict(color="black", width=1)),
+        name="Start", showlegend=True,
+    ))
+    fig.add_trace(go.Scatter3d(
+        x=[x[-1]], y=[y[-1]], z=[z[-1]],
+        mode="markers",
+        marker=dict(size=7, color="red", symbol="x",
+                    line=dict(color="black", width=1)),
+        name="End", showlegend=True,
+    ))
+
+    fig.update_layout(
+        title=dict(
+            text=f"Force Landscape: {tf_name} → {target_name}",
+            font=dict(size=18, family="Helvetica Neue, Arial"),
+            x=0.5,
+        ),
+        scene=dict(
+            xaxis_title="TF Expression (log CPM)",
+            yaxis_title="β (edge strength)",
+            zaxis_title="Regulatory Force",
+            camera=dict(eye=dict(x=1.5, y=-1.5, z=1.0)),
+        ),
+        width=width, height=height,
+        paper_bgcolor="white",
+        margin=dict(l=10, r=10, t=60, b=10),
+    )
+    return fig
+
+
+def plot_force_by_tf(
+    beta_curves: pd.DataFrame,
+    regulon_tf_expression: pd.DataFrame,
+    force_curves: pd.DataFrame,
+    dtime: pd.Series,
+    links: list = None,
+    width: int = 1200,
+    height: int = 900,
+):
+    """
+    One 3D subplot per TF, showing all its target trajectories.
+    Good for comparing how a single TF's different targets behave.
+    """
+    if links is None:
+        links = beta_curves.index.tolist()
+
+    # Group links by TF
+    from collections import defaultdict
+    tf_groups = defaultdict(list)
+    for tf, tgt in links:
+        tf_groups[tf].append((tf, tgt))
+
+    tfs = sorted(tf_groups.keys())
+    n_tfs = len(tfs)
+    cols = min(3, n_tfs)
+    rows = int(np.ceil(n_tfs / cols))
+
+    specs = [[{"type": "scatter3d"} for _ in range(cols)] for _ in range(rows)]
+    subplot_titles = [tf for tf in tfs]
+
+    fig = make_subplots(
+        rows=rows, cols=cols,
+        specs=specs,
+        subplot_titles=subplot_titles,
+        horizontal_spacing=0.02,
+        vertical_spacing=0.06,
+    )
+
+    targets_per_tf = beta_curves.index.get_level_values(0).value_counts()
+    expanded_tf = pd.DataFrame(
+        np.repeat(regulon_tf_expression.values,
+                  [targets_per_tf[tf] for tf in regulon_tf_expression.index], axis=0),
+        index=beta_curves.index,
+        columns=beta_curves.columns,
+    )
+
+    for idx, tf in enumerate(tfs):
+        r = idx // cols + 1
+        c = idx % cols + 1
+        scene_name = f"scene{idx + 1}" if idx > 0 else "scene"
+        targets = tf_groups[tf]
+        cmap = _get_qualitative_colors(len(targets))
+
+        for j, (tf_name, tgt_name) in enumerate(targets):
+            x = expanded_tf.loc[(tf_name, tgt_name)].values.astype(float)
+            y = beta_curves.loc[(tf_name, tgt_name)].values.astype(float)
+            z = force_curves.loc[(tf_name, tgt_name)].values.astype(float)
+
+            fig.add_trace(
+                go.Scatter3d(
+                    x=x, y=y, z=z,
+                    mode="lines",
+                    line=dict(color=cmap[j], width=4),
+                    name=f"{tf_name}→{tgt_name}",
+                    legendgroup=tf,
+                ),
+                row=r, col=c,
+            )
+
+        fig.update_layout(**{
+            scene_name: dict(
+                xaxis_title="TF expr",
+                yaxis_title="β",
+                zaxis_title="Force",
+                camera=dict(eye=dict(x=1.4, y=-1.4, z=0.8)),
+            )
+        })
+
+    fig.update_layout(
+        title="Force Landscapes by TF",
+        width=width,
+        height=height * rows / 2,
+        paper_bgcolor="white",
+    )
+    return fig
+
+
+def _get_qualitative_colors(n: int) -> list:
+    """Return n visually distinct colours (hex strings)."""
+    palette = [
+        "#6A3D9A", "#1F78B4", "#E31A1C", "#33A02C", "#FF7F00",
+        "#FB9A99", "#B2DF8A", "#A6CEE3", "#FDBF6F", "#CAB2D6",
+        "#B15928", "#FFFF99", "#8DD3C7", "#BEBADA", "#FB8072",
+        "#80B1D3", "#FDB462", "#BC80BD", "#CCEBC5", "#D9D9D9",
+    ]
+    if n <= len(palette):
+        return palette[:n]
+    # cycle if more links than palette entries
+    return [palette[i % len(palette)] for i in range(n)]

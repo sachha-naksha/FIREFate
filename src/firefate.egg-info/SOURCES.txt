@@ -10,6 +10,7 @@ src/firefate.egg-info/top_level.txt
 src/firefate/core/__init__.py
 src/firefate/core/episodic_dynamics.py
 src/firefate/core/pseudotime_curves.py
+src/firefate/core/stat_extensions.py
 src/firefate/enrichment/__init__.py
 src/firefate/enrichment/slide_grn.py
 src/firefate/grn/__init__.py
