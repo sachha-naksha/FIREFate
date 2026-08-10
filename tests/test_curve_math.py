@@ -7,6 +7,10 @@ failure here is a defect in the library rather than in the fixture.
 Tests marked ``xfail(strict=True)`` document a defect that currently exists in
 the code; see ``tests/ISSUES.md``.  If one starts XPASSing, the bug was fixed
 and the test should be converted into a normal assertion.
+
+``ISSUES.md`` records the maintainer triage of each finding.  Comments below say
+which status a test is pinning, so a reader can tell "known defect, fix wanted"
+from "reviewed, intended behaviour, guarded against accidental change".
 """
 
 import numpy as np
@@ -199,7 +203,8 @@ class TestSwitchingTime:
         assert curves.calculate_switching_time(dx, dy) == pytest.approx([0.0])
 
     def test_is_numerically_unstable_when_endpoints_nearly_coincide(self, curves):
-        # ISSUE: the 1e-300 guard only protects against an exactly zero
+        # ISSUES.md #8 (accepted, edge case) -- the 1e-300 guard only protects
+        # against an exactly zero
         # denominator.  A bump whose endpoints differ by one float ulp divides a
         # ~1e-16 numerator by a ~1e-16 denominator and returns a completely
         # arbitrary "switching time" instead of ~0.
@@ -340,7 +345,8 @@ class TestClassification:
         ids=["single-curve", "all-monotone", "identical-curves"],
     )
     def test_degenerate_zscores_crash_the_classifier(self, curves, dy):
-        # ISSUE: when one of the two metrics has zero variance across curves
+        # ISSUES.md #4 (accepted, edge case) -- when one of the two metrics has
+        # zero variance across curves
         # (a single TF, or every TF monotone -> transient logFC all zero) the
         # z-scores are nan, and ranking them hits
         # ``.astype(int)`` on a nan column.  The user gets an opaque pandas
@@ -351,7 +357,7 @@ class TestClassification:
 
     @pytest.mark.xfail(
         strict=True,
-        reason="ISSUE: a set of purely monotone curves (transient logFC all zero) is a "
+        reason="ISSUES.md #4 -- a set of purely monotone curves (transient logFC all zero) is a "
                "legitimate input but zscore -> nan -> rank -> astype(int) raises "
                "IntCastingNaNError instead of classifying them as up/down.",
     )
@@ -455,7 +461,7 @@ class TestTopKByClass:
 
     @pytest.mark.xfail(
         strict=True,
-        reason="ISSUE: get_top_k_tfs_by_class returns positional integers, never TF "
+        reason="ISSUES.md #5 (confirmed) -- get_top_k_tfs_by_class returns positional integers, never TF "
                "names, because curve_characteristics rebuilds a RangeIndex and (unlike "
                "classify_wave_patterns) this method never restores dy's labels.",
     )
@@ -477,10 +483,13 @@ class TestTopKByClass:
 # --------------------------------------------------------------------------- #
 
 def _expected_force(beta, tf_expr, epsilon=1e-10):
-    """The formula the implementation actually evaluates.
+    """The transform the implementation evaluates.
 
-    ``sign(b) * exp(log10(|b| + eps) + log10(t + eps))`` which is
-    ``sign(b) * ((|b| + eps) * (t + eps)) ** (1 / ln 10)`` -- *not* ``b * t``.
+    ``sign(b) * exp(log10(|b| + eps) + log10(t + eps))``, i.e.
+    ``sign(b) * ((|b| + eps) * (t + eps)) ** (1 / ln 10)``: a sign-preserving
+    compression of the product, not the product itself.  ISSUES.md #7 records
+    this as intended (the docstring on ``calculate_force_curves`` is what needs
+    correcting, not the code).
     """
     return np.sign(beta) * ((np.abs(beta) + epsilon) * (tf_expr + epsilon)) ** LOG10E
 
@@ -530,9 +539,10 @@ class TestStaticForceCurves:
         assert np.isnan(out.values).all()
 
     def test_series_expression_is_not_supported_despite_docstring(self):
-        # The docstring/type hint says ``tf_expression: pd.Series``; a Series
-        # makes np.repeat return a 1-D array which cannot be reshaped into the
-        # multi-column frame.
+        # ISSUES.md #21 -- reviewed, not actioned.  The docstring/type hint says
+        # ``tf_expression: pd.Series``; a Series makes np.repeat return a 1-D
+        # array which cannot be reshaped into the multi-column frame.  Pinned so
+        # the current (DataFrame-only) contract cannot change unnoticed.
         index = pd.MultiIndex.from_tuples(
             [("TFA", "G1"), ("TFA", "G2")], names=["TF", "Target"]
         )
@@ -542,14 +552,16 @@ class TestStaticForceCurves:
 
     @pytest.mark.xfail(
         strict=True,
-        reason="ISSUE: calculate_force_curves repeats tf_expression positionally using "
-               "value_counts() (count-sorted) without reindexing, so each edge is "
-               "multiplied by the wrong TF's expression whenever the expression frame is "
-               "not already sorted by target count. episodic_dynamics."
-               "calculate_force_curves_chunk does the .loc[targets_per_tf.index] "
-               "reindex that is missing here.",
+        reason="ISSUES.md #2 (REVISED, medium) -- calculate_force_curves pairs beta rows "
+               "with expression rows positionally, never by TF name. This input (a beta "
+               "frame with UNEQUAL target counts per TF, e.g. one filtered by hand) is "
+               "NOT what get_beta_curves produces, so it is not the normal case: a "
+               "get_beta_curves cross product has equal counts, value_counts() ties, and "
+               "the positional pairing happens to line up. See "
+               "TestBetaCurvesFeedingForceCurves in test_smoothed_curves_grn.py for the "
+               "failure mode that IS reachable through the public API.",
     )
-    def test_aligns_expression_by_tf_name(self):
+    def test_aligns_expression_by_tf_name_with_unequal_target_counts(self):
         index = pd.MultiIndex.from_tuples(
             [("TFA", "G1"), ("TFB", "G2"), ("TFB", "G3")], names=["TF", "Target"]
         )
@@ -564,9 +576,11 @@ class TestStaticForceCurves:
         )
         assert out.values == pytest.approx(expected)
 
-    def test_force_is_not_beta_times_expression(self):
-        # Documents the size of the discrepancy with the docstring
-        # ("force is calculated as beta * tf_expression").
+    def test_force_is_a_log_space_compression_of_the_product(self):
+        # ISSUES.md #7 -- DOCS ONLY.  The log-space transform is intended; the
+        # docstring's "force is calculated as beta * tf_expression" is what is
+        # wrong.  This pins the actual relation and the size of the difference
+        # so the docstring and the code cannot drift apart again.
         index = pd.MultiIndex.from_tuples([("TFA", "G1")], names=["TF", "Target"])
         beta = pd.DataFrame([[3.0]], index=index, columns=["time_0"])
         expr = pd.DataFrame([[7.0]], index=["TFA"], columns=["time_0"])

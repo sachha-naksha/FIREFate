@@ -430,13 +430,15 @@ class TestForceCurvesChunk:
 
     @pytest.mark.xfail(
         strict=True,
-        reason="ISSUE: calculate_force_curves_chunk reindexes tf_expression to the "
-               "value_counts() order (descending target count) and then repeats it "
-               "positionally onto beta_chunk's rows.  Unless the beta rows happen to be "
-               "grouped in that same order, every edge is multiplied by another TF's "
-               "expression.  Rows coming out of build_episode_grn are grouped in "
-               "network order, not by target count, so the episodic force curves are "
-               "mis-assigned whenever two TFs have different target counts.",
+        reason="ISSUES.md #1 (CONFIRMED, high) -- calculate_force_curves_chunk reindexes "
+               "tf_expression to the value_counts() order (descending target count) and "
+               "then repeats it positionally onto beta_chunk's rows.  Unless the beta "
+               "rows happen to be grouped in that same order, every edge is multiplied "
+               "by another TF's expression.  Rows coming out of build_episode_grn are "
+               "grouped in network order, and filter_edges then drops rows so the target "
+               "counts become unequal -- so the episodic force curves are mis-assigned. "
+               "get_tf_indices is NOT in this code path (it is called only from "
+               "get_beta_curves), so it does not account for the ordering here.",
     )
     def test_expression_is_matched_by_tf_name_not_by_row_order(self):
         index = pd.MultiIndex.from_tuples(
@@ -489,9 +491,10 @@ class TestForceCurvesParallel:
         assert list(out.columns) == ["time_0", "time_1"]
 
     def test_columns_not_named_time_something_are_silently_dropped(self):
-        # ISSUE: the time columns are found by a ``startswith("time_")`` prefix
-        # match, so a frame that names its pseudotime columns anything else
-        # produces a result with no columns at all instead of an error.
+        # ISSUES.md #16 -- reviewed, not actioned.  The time columns are found
+        # by a ``startswith("time_")`` prefix match, so a frame that names its
+        # pseudotime columns anything else produces a result with no columns at
+        # all instead of an error.  Pinned so the convention cannot drift.
         index = pd.MultiIndex.from_tuples([("TFA", "G1")], names=["TF", "Target"])
         beta = pd.DataFrame([[1.0]], index=index, columns=["t0"])
         expr = pd.DataFrame([[1.0]], index=["TFA"], columns=["t0"])
@@ -564,9 +567,10 @@ class TestEpisodicGrnSubset:
             get_episodic_grn_subset(str(tmp_path / "nothing"), ["TFA"], ["G1"])
 
     def test_does_not_read_the_parquet_files_the_runners_write(self, tmp_path):
-        # ISSUE: run_episodic_construction saves ``episode_<i>.parquet`` but this
-        # reader only globs ``episode_<i>.pkl``, so the two halves of the
-        # workflow cannot be chained without a manual conversion.
+        # ISSUES.md #6 (CONFIRMED) -- run_episodic_construction saves
+        # ``episode_<i>.parquet`` but this reader only globs ``episode_<i>.pkl``,
+        # so the two halves of the workflow cannot be chained without a manual
+        # conversion.  Whichever format wins, this test must be updated with it.
         folder = tmp_path / "parquet_only"
         folder.mkdir()
         index = pd.MultiIndex.from_tuples([("TFA", "G1")], names=["TF", "Target"])

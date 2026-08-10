@@ -118,7 +118,7 @@ class TestSmooth:
         assert SmoothedCurvesChromatin._smooth(series, 2.0).std() < series.std()
 
     def test_a_single_nan_poisons_the_whole_series(self):
-        # ISSUE: gaussian_filter1d has no NaN handling, and extract_data uses
+        # ISSUES.md #9 (untriaged) -- gaussian_filter1d has no NaN handling, and extract_data uses
         # NaN as the "TF absent from this window" sentinel, so one missing
         # window silently turns a TF's entire smoothed trajectory into NaN.
         series = np.array([1.0, 2.0, np.nan, 4.0, 5.0])
@@ -177,9 +177,11 @@ class TestProcessSingleWindow:
         )
 
     def test_malformed_loc_column_is_swallowed_silently(self, tmp_path):
-        # ISSUE: the bare ``except Exception`` in the worker turns any file
-        # problem -- here a two-field ``loc`` -- into an all-NaN window that is
-        # indistinguishable from "TF genuinely absent".
+        # ISSUES.md #10 (ACCEPTED) -- the bare ``except Exception`` in the worker
+        # turns any file problem -- here a two-field ``loc`` -- into an all-NaN
+        # window that is indistinguishable from "TF genuinely absent".  This
+        # pins the current behaviour; rewrite it as an assertion on the reported
+        # error once the worker distinguishes the failure modes.
         base = tmp_path / "bad"
         folder = base / "Subset1"
         folder.mkdir(parents=True)
@@ -329,8 +331,8 @@ class TestProcessDynamics:
         )
 
     def test_unknown_metric_silently_falls_back_to_counts(self, dense_analyzer):
-        # ISSUE: ``metric`` is not validated; anything that is not the exact
-        # string 'score' is treated as 'count'.
+        # ISSUES.md #17 -- reviewed, not actioned.  ``metric`` is not validated;
+        # anything that is not the exact string 'score' is treated as 'count'.
         dense_analyzer.set_trajectory_info([0, 1], [2, 3], np.arange(6.0))
         dense_analyzer.process_dynamics(metric="scores", smooth_sigma=NO_SMOOTHING)
         from_typo = dense_analyzer.series_pb["X"].copy()
@@ -365,7 +367,7 @@ class TestProcessDynamics:
         assert a.series_pb["X"] == pytest.approx(np.zeros(2))
 
     def test_missing_window_poisons_the_whole_smoothed_series(self, binding_dir):
-        # ISSUE (consequence of _smooth having no NaN handling): TFB is missing
+        # ISSUES.md #9 (untriaged; consequence of _smooth having no NaN handling): TFB is missing
         # from a single window and its entire trajectory becomes NaN.
         a = SmoothedCurvesChromatin(["TFB"], binding_dir)
         a.extract_data(n_windows=3, n_processes=1)

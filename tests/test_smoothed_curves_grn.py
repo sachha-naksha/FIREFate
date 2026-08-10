@@ -357,3 +357,70 @@ class TestBetaCurves:
     def test_unknown_varname_raises(self, curves):
         with pytest.raises(AssertionError):
             curves.get_beta_curves([("TFA", "G1")], varname="not_a_variable")
+
+
+# --------------------------------------------------------------------------- #
+# get_beta_curves -> calculate_force_curves                                     #
+# --------------------------------------------------------------------------- #
+
+class TestBetaCurvesFeedingForceCurves:
+    """The reachable half of ISSUES.md #2 (REVISED).
+
+    ``calculate_force_curves`` pairs beta rows with expression rows purely by
+    position.  A beta frame from ``get_beta_curves`` is a full cross product, so
+    every TF has the same number of targets, ``value_counts()`` ties, and the
+    positional pairing lines up -- *provided* the caller supplies the expression
+    rows in the same order as the beta frame's TF groups.  That order comes from
+    ``list(set(...))`` inside ``get_beta_curves`` (see #13), so it is not the
+    caller's link order and not stable between runs.
+    """
+
+    @staticmethod
+    def _expected(beta, expr, tf, target, epsilon=1e-10):
+        b = beta.loc[(tf, target)].values
+        t = expr.loc[tf].values
+        return np.sign(b) * ((np.abs(b) + epsilon) * (t + epsilon)) ** (1 / np.log(10))
+
+    @pytest.fixture
+    def beta_and_expression(self, curves):
+        beta, _ = curves.get_beta_curves([("TFA", "G1"), ("TFB", "G4")], varname="w")
+        expr, _ = curves.get_smoothed_curves(mode="tf_expression")
+        expr.columns = beta.columns
+        return beta, expr
+
+    def test_every_tf_has_the_same_number_of_targets(self, beta_and_expression):
+        # the property that makes the positional pairing work at all
+        beta, _ = beta_and_expression
+        assert beta.index.get_level_values(0).value_counts().nunique() == 1
+
+    def test_correct_when_expression_follows_the_beta_group_order(self, beta_and_expression):
+        beta, expr = beta_and_expression
+        groups = list(dict.fromkeys(beta.index.get_level_values(0)))
+        out = SmoothedCurvesGRN.calculate_force_curves(beta, expr.loc[groups])
+        for tf, target in beta.index:
+            assert out.loc[(tf, target)].values == pytest.approx(
+                self._expected(beta, expr, tf, target)
+            ), f"{tf}->{target}"
+
+    def test_silently_wrong_when_expression_is_in_any_other_order(self, beta_and_expression):
+        # ISSUES.md #2: no error, no warning -- just wrong numbers for every
+        # non-zero edge.  Zero-beta rows survive because sign(0) == 0.
+        beta, expr = beta_and_expression
+        groups = list(dict.fromkeys(beta.index.get_level_values(0)))
+        out = SmoothedCurvesGRN.calculate_force_curves(beta, expr.loc[groups[::-1]])
+        wrong = [
+            (tf, target) for tf, target in beta.index
+            if not np.allclose(out.loc[(tf, target)].values,
+                               self._expected(beta, expr, tf, target))
+        ]
+        assert set(wrong) == {("TFA", "G1"), ("TFB", "G4")}   # the two real edges
+
+    def test_the_safe_idiom_derives_the_order_from_the_beta_frame(self, beta_and_expression):
+        # what a caller should write, given the order is not knowable in advance
+        beta, expr = beta_and_expression
+        safe = expr.loc[beta.index.get_level_values(0).unique()]
+        out = SmoothedCurvesGRN.calculate_force_curves(beta, safe)
+        for tf, target in beta.index:
+            assert out.loc[(tf, target)].values == pytest.approx(
+                self._expected(beta, expr, tf, target)
+            )

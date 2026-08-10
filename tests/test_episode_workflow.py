@@ -177,6 +177,9 @@ class TestBuildEpisodeGrn:
         assert as_tuples(grn.index) == EPISODE_EDGES
 
     def test_znf_and_zbtb_regulators_are_dropped(self, episode):
+        # ISSUES.md #12 -- BY DESIGN, not a defect: ZNF*/ZBTB* factors are not
+        # relevant to FIREFate's biology and are dropped deliberately.  This is a
+        # regression guard so the filter is not removed by accident.
         grn = episode.build_episode_grn(time_slice=slice(0, 5))
         # ZNF1 -> G1 is the strongest edge in the network and is still removed
         assert "ZNF1" not in set(grn.index.get_level_values(0))
@@ -228,11 +231,13 @@ class TestBuildEpisodeGrn:
         assert list(grn.index.names) == ["TF", "Target"]
 
     def test_edges_are_retained_by_row_sum_not_by_activity(self, episode):
-        # ISSUE (latent): presence is decided by ``sum(axis=1) != 0`` rather than
-        # "has any non-zero value".  TFA -> G3 swings from strongly positive to
-        # negative inside this episode and survives only because the two halves
-        # do not cancel exactly; an edge whose values did cancel would be
-        # dropped despite being active at every time point.
+        # ISSUES.md #14 -- accepted, rare.  Presence is decided by
+        # ``sum(axis=1) != 0`` rather than "has any non-zero value".  TFA -> G3
+        # swings from strongly positive to negative inside this episode and
+        # survives only because the two halves do not cancel exactly; an edge
+        # whose values did cancel would be dropped despite being active at every
+        # time point.  Suggested change: ``(df != 0).any(axis=1)`` -- this test
+        # passes unchanged either way.
         grn = episode.build_episode_grn(time_slice=slice(0, NUM_POINTS))
         row = grn.loc[("TFA", "G3")]
         assert (row > 0).any() and (row < 0).any()
@@ -318,12 +323,14 @@ class TestComputeTfExpression:
 
     @pytest.mark.xfail(
         strict=True,
-        reason="ISSUE: compute_tf_expression always takes the FIRST n columns of the "
+        reason="ISSUES.md #3 (CONFIRMED, high; fix drafted in ISSUES.md) -- "
+               "compute_tf_expression always takes the FIRST n columns of the "
                "pseudotime expression curve (``iloc[:, 0:n_time_cols]``) and relabels "
                "them time_0..time_n, regardless of which time_slice build_episode_grn "
                "used.  For any episode other than the first, the regulator expression "
                "is taken from the wrong stretch of pseudotime; the episode's time_slice "
-               "is not even stored on the object.",
+               "is not even stored on the object.  When the fix lands, drop this marker "
+               "and delete test_currently_reuses_the_first_time_points_for_every_episode.",
     )
     def test_expression_is_taken_from_the_episode_s_own_time_window(self, episode):
         episode.compute_expression_curves()
@@ -384,10 +391,14 @@ class TestCalculateForces:
 
     @pytest.mark.xfail(
         strict=True,
-        reason="ISSUE: calculate_forces inherits the calculate_force_curves_chunk "
-               "misalignment -- the TF expression is repeated in value_counts() order "
-               "(descending target count) onto rows that are grouped in network order, "
-               "so edges get another TF's expression whenever the two orders differ.",
+        reason="ISSUES.md #1 (CONFIRMED, high) -- calculate_forces inherits the "
+               "calculate_force_curves_chunk misalignment: the TF expression is repeated "
+               "in value_counts() order (descending target count) onto rows that are "
+               "grouped in network order, so edges get another TF's expression whenever "
+               "the two orders differ.  NB the mock fixture happens to make the two "
+               "orders agree (TFA has more targets AND a lower nids[0] index), which is "
+               "why the end-to-end workflow tests above still pass -- that coincidence "
+               "will not hold on a real network with hundreds of TFs.",
     )
     def test_expression_is_matched_to_the_right_regulator(self, episode):
         # TFA has one edge, TFB has two: the row order (TFA first) and the
