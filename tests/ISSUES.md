@@ -27,7 +27,31 @@ Nothing in the library was modified.
 
 ### 1. Force curves are multiplied by the wrong TF's expression
 
-**Status: CONFIRMED.**  Re-checked after the observation that
+**Runnable proof:** `tests/issues_1_and_2_force_misalignment.ipynb` (executed, outputs saved).
+
+**Status: CONFIRMED, and reached by production code.**  A later audit of the
+repo's own call sites confirmed the notebook is not exercising an invented
+order:
+
+* `EnrichmentManager.enrich_episodic` and `run_episodic_construction` make
+  exactly the call sequence the notebook uses (verified by extracting the
+  `epi.<method>()` calls from their source at run time);
+* `multiome_dynamic_regulation/py_scripts/analysis/LF_local_dynamics.ipynb`
+  cells 28-29 hit it outside the class API too: it builds the expression frame as
+  `lcpm_dcurve.loc[filtered_edges_p001.index.get_level_values(0).unique()]`
+  (first-appearance = row-group order) and passes it to
+  `calculate_force_curves_parallel` with `n_processes=20, chunk_size=30000`.
+
+The skew is also not contrived.  `dictys` builds `nids[0]` with `sorted(...)`, so
+`build_episode_grn` emits TF row groups in **alphabetical** order while
+`value_counts()` orders them by **descending target count**; for *n* TFs with
+distinct counts those coincide with probability 1/*n*!.
+
+(Incidentally, `LF_local_dynamics.ipynb`'s hand-written `iloc[:, 35:40]` is a
+manual workaround for issue 3 -- corroborating that the class method's fixed
+`0:n` slice is wrong.)
+
+**Earlier status: CONFIRMED.**  Re-checked after the observation that
 `utils.custom.get_tf_indices` might account for the ordering.  It does not:
 `get_tf_indices` is called from `get_beta_curves` only (`grep` over `src/`
 returns exactly one call site) and is nowhere in the episodic force path.  The
@@ -83,6 +107,41 @@ half that *is* reachable through the public API -- `test_smoothed_curves_grn.py:
 
 **Status: REVISED -- downgrade from High to Medium.  The original wording
 overstated this.**
+**Runnable proof:** `tests/issues_1_and_2_force_misalignment.ipynb` (executed, outputs saved).
+
+**Coupled with issue 13 -- do not fix them separately.**  What keeps this
+latent is precisely the cross product from issue 13: every TF in a cross product
+has the same target count, so `value_counts()` ties, ties keep first-appearance
+order, and the positional pairing lands correctly.  Returning only the requested
+links (the obvious fix for 13) gives a frame with *unequal* counts per TF, at
+which point `value_counts()` re-sorts and this becomes live.  Demonstrated in the
+notebook: asking for `[(TFA,G1), (TFB,G4), (TFB,G5)]` and passing the expression
+in group order gives `TFB->G4` TFA's expression (10 rather than 1000).
+
+**Later audit -- downgrade again: latent, no caller currently affected.**  All
+four real call sites already align by name:
+
+| caller | expression frame passed |
+| --- | --- |
+| `state_dynamics.py` `compute_forces` | `tf_expression.loc[beta_curves.index.get_level_values(0).unique()]` |
+| `state_dynamics.py` `force_curves_for_links` | same |
+| `LF_global_dynamics.ipynb` cell 29 | same |
+| `t_cell_analysis.ipynb` cell 21 | same (cell 26 goes further, a full per-row `reindex`) |
+
+`.unique()` returns first-appearance order, which *is* the beta frame's TF-group
+order, so the positional pairing lands correctly.  Nothing in the repo is
+currently producing wrong forces through this function.  What stands is that the
+invariant is unenforced -- `calculate_force_curves` never checks it -- so the
+correctness of every call depends on the caller remembering the idiom.  A
+name-based reindex inside the function would make that structural rather than
+conventional.  Treat as a robustness/API item, not a defect.
+
+A further wrinkle the notebook makes concrete: unlike
+`calculate_force_curves_chunk`, the static method does not reindex
+`tf_expression` **at all**, so it uses the caller's row order for the expression
+*values* but the count-sorted order for the repeat *counts*.  Those two
+mismatches cancel in some layouts and not in others, which is why this behaves
+as a footgun rather than a consistent error.
 
 The claim "each edge is multiplied by the wrong TF's expression whenever the
 expression frame is not sorted by target count" is untrue for the input this
@@ -532,6 +591,11 @@ lands.
       so results cannot be diffed or checksummed across sessions;
     * `.iloc[:5]`, `.head()` and "the first N edges" mean something different
       each run, including inside plots.
+
+    **Fixing this alone would activate issue 2** -- a frame restricted to the
+    requested links has unequal target counts per TF, which is exactly the
+    condition the positional pairing in `calculate_force_curves` cannot handle.
+    Apply the name-based reindex from issue 1/2 at the same time.
 
     Both parts are fixed together by building the index from the requested links
     instead of from two sets:
