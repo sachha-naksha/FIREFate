@@ -9,8 +9,8 @@ private fast paths, and the two process-level runners.
 ```bash
 conda activate dictys
 cd FIREFate
-pytest tests -q                 # everything (~20 s)
-pytest tests -q -m "not slow"   # skip the tests that spawn worker processes
+pytest tests/episodic -q                 # everything (~20 s)
+pytest tests/episodic -q -m "not slow"   # skip the tests that spawn worker processes
 ```
 
 ## Layout

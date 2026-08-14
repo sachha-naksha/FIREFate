@@ -5,7 +5,7 @@ paper (or cross-checked against an independent numpy implementation), so a
 failure here is a defect in the library rather than in the fixture.
 
 Tests marked ``xfail(strict=True)`` document a defect that currently exists in
-the code; see ``tests/ISSUES.md``.  If one starts XPASSing, the bug was fixed
+the code; see ``tests/episodic/ISSUES.md``.  If one starts XPASSing, the bug was fixed
 and the test should be converted into a normal assertion.
 
 ``ISSUES.md`` records the maintainer triage of each finding.  Comments below say
