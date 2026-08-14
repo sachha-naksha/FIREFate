@@ -2486,6 +2486,38 @@ def plot_tf_enrichment_bars(
     return fig, ax
 
 
+def plot_strength_key_distribution(
+    edges: pd.DataFrame,
+    title: str = "Distribution of key and strength",
+    out_path: str | Path | None = None,
+    *,
+    figsize: tuple[float, float] | None = None,
+) -> tuple[Any, Any]:
+    """Stacked bar of edge counts per (strength, key) — the state-specific GRN edge diagnostic.
+
+    ``edges`` is a flat edge table with ``strength`` (0/1) and ``key`` (MultiDiGraph
+    edge key) columns, as returned by ``grn_edges_from_combined_links``. Saves and
+    closes the figure when ``out_path`` is given.
+    """
+    ax = (
+        edges.groupby(["strength", "key"])
+        .size()
+        .unstack()
+        .plot(kind="bar", stacked=True, figsize=figsize)
+    )
+    ax.set_xlabel("Strength")
+    ax.set_ylabel("Count")
+    ax.set_title(title)
+    fig = ax.get_figure()
+
+    if out_path is not None:
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(out_path)
+        plt.close(fig)
+    return fig, ax
+
+
 def plotly_tf_enrichment_bars(plot_df: pd.DataFrame, title: str) -> Any:
     """Interactive plotly version of :func:`plot_tf_enrichment_bars` (notebook display).
 

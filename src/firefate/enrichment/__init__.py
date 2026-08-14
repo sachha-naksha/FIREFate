@@ -15,8 +15,10 @@ from firefate.enrichment.slide_grn import (
     hypergeom_slide_grn_score,
     write_enrichment_table,
 )
+from firefate.enrichment.sse import StateSpecificEnrichment
 
 __all__ = [
+    "StateSpecificEnrichment",
     "build_enrichment_table",
     "build_tf_color_bar_table",
     "get_slide_grn_enrichment",

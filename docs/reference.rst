@@ -40,6 +40,10 @@ Enrichment
    :members:
    :undoc-members:
 
+.. automodule:: firefate.enrichment.sse
+   :members:
+   :undoc-members:
+
 Utilities
 ---------
 
