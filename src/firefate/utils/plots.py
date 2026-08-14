@@ -2409,8 +2409,8 @@ def plot_tf_gene_coregulation_heatmap(
 COLOR_MAP = {"red": "#c1272d", "blue": "#2b6cb0", "gray": "#b0b0b0"}
 _COLOR_ORDER = ["red", "blue", "gray"]
 _COLOR_LABELS = {
-    "red": "positively correlated LF gene",
-    "blue": "negatively correlated LF gene",
+    "red": "high in case",  # corrs >= 0 with the LF (e.g. PRDM1/XBP1/MZB1 in Z11 = PB)
+    "blue": "high in control",  # corrs < 0 (e.g. PAX5/AFF3 in Z11 = GC)
     "gray": "not an LF gene",
 }
 
