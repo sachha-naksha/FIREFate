@@ -86,7 +86,13 @@ def plot_tf_episodic_enrichment_dotplot(
     horizontal_layout : bool, default False
         If True, episodes are on y-axis (top to bottom) and TFs on x-axis (left to right).
         If False (default), TFs are on y-axis and episodes on x-axis.
-    """    
+    When tf_order is None and sort_by_gene_similarity is False, TFs are ordered by the
+    episode in which they peak: all TFs peaking in episode 1 first, then episode 2, etc.
+    The peak episode is the one with the highest enrichment score among that TF's
+    significant episodes (p_value <= p_value_threshold), falling back to all episodes if
+    none are significant. Within an episode block, TFs are ordered by decreasing peak
+    enrichment score.
+    """
     # 1-5. [Same validation and filtering code as before]
     required_cols = ['TF', 'p_value', 'enrichment_score', 'genes_in_lf', 'genes_dwnstrm']
     
@@ -196,10 +202,19 @@ def plot_tf_episodic_enrichment_dotplot(
             linkage_matrix = None
             original_tf_labels = None
     else:
-        all_tfs_sorted = sorted(tf_genes_dict.keys())
+        # Order TFs by the episode where they peak (Ep1 block, then Ep2 block, ...),
+        # and within each block by decreasing peak enrichment score.
+        tf_peaks = []
+        for tf_name in tf_genes_dict.keys():
+            tf_rows = plot_data_df[plot_data_df['TF'] == tf_name]
+            sig_rows = tf_rows[tf_rows['p_value'] <= p_value_threshold]
+            rows = sig_rows if not sig_rows.empty else tf_rows
+            peak_row = rows.loc[rows['enrichment_score'].idxmax()]
+            tf_peaks.append((peak_row['episode_idx'], -peak_row['enrichment_score'], tf_name))
+        all_tfs_sorted = [tf for _, _, tf in sorted(tf_peaks)]
         linkage_matrix = None
         original_tf_labels = None
-    
+
     # 7. Map p-values to dot sizes
     def p_value_to_size(p_val):
         if p_val > p_value_threshold:
