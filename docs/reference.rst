@@ -19,6 +19,14 @@ Core dynamics
    :members:
    :undoc-members:
 
+.. automodule:: firefate.core.state_dynamics
+   :members:
+   :undoc-members:
+
+.. automodule:: firefate.core.validation
+   :members:
+   :undoc-members:
+
 Managers
 --------
 

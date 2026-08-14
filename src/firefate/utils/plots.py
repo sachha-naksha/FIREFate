@@ -32,6 +32,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from plotly.subplots import make_subplots
 from scipy.cluster.hierarchy import dendrogram, leaves_list, linkage
 from scipy.spatial.distance import squareform
+from scipy.stats import mannwhitneyu
 
 def sort_tfs_by_gene_similarity(tf_genes_dict, method='jaccard_hierarchical', return_linkage=False):
     """Sorts TFs based on gene similarity using Jaccard similarity and hierarchical clustering."""
@@ -2422,59 +2423,61 @@ def plot_tf_enrichment_bars(
     min_label_proportion: float = 0.08,
     figsize: tuple[float, float] | None = None,
 ) -> tuple[Any, Any]:
-    """Stacked bar of enrichment score per TF, split by LF correlation sign.
+    """Stacked horizontal bar of enrichment score per TF, split by LF correlation sign.
 
-    Segments smaller than ``min_label_proportion`` of the bar are left unlabelled so
-    the in-bar percentages stay readable. Saves vector output (SVG/PDF) when
-    ``out_path`` is given.
+    TFs run down the y axis, highest score at the top. Segments smaller than
+    ``min_label_proportion`` of the bar are left unlabelled so the in-bar percentages
+    stay readable. Saves vector output (SVG/PDF) when ``out_path`` is given.
     """
     wide = (
         plot_df.pivot(index="source", columns="color", values="height")
         .reindex(columns=_COLOR_ORDER, fill_value=0.0)
         .fillna(0.0)
+        .iloc[::-1]  # barh draws the first row at the bottom
     )
     props = (
         plot_df.pivot(index="source", columns="color", values="proportion")
         .reindex(columns=_COLOR_ORDER, fill_value=0.0)
         .fillna(0.0)
+        .reindex(wide.index)
     )
     tfs = list(wide.index)
 
     if figsize is None:
-        figsize = (max(6.0, 0.28 * len(tfs) + 2.0), 4.5)
+        figsize = (6.0, max(3.0, 0.22 * len(tfs) + 1.5))
     fig, ax = plt.subplots(figsize=figsize)
 
-    bottom = pd.Series(0.0, index=wide.index)
+    left = pd.Series(0.0, index=wide.index)
     for color in _COLOR_ORDER:
-        heights = wide[color]
-        if heights.sum() == 0:
+        widths = wide[color]
+        if widths.sum() == 0:
             continue
-        ax.bar(
+        ax.barh(
             tfs,
-            heights,
-            bottom=bottom,
+            widths,
+            left=left,
             color=COLOR_MAP[color],
             label=_COLOR_LABELS[color],
-            width=0.8,
+            height=0.8,
         )
         for tf in tfs:
             if props.loc[tf, color] >= min_label_proportion:
                 ax.text(
+                    left[tf] + widths[tf] / 2,
                     tf,
-                    bottom[tf] + heights[tf] / 2,
                     f"{props.loc[tf, color] * 100:.0f}%",
                     ha="center",
                     va="center",
                     fontsize=5,
                     color="white",
                 )
-        bottom = bottom + heights
+        left = left + widths
 
-    ax.set_xlabel("Transcription factor (TF)")
-    ax.set_ylabel("Enrichment score")
+    ax.set_ylabel("Transcription factor (TF)")
+    ax.set_xlabel("Enrichment score")
     ax.set_title(title)
-    ax.tick_params(axis="x", rotation=90, labelsize=6)
-    ax.set_ylim(0, float(wide.sum(axis=1).max()) * 1.08)
+    ax.tick_params(axis="y", labelsize=6)
+    ax.set_xlim(0, float(wide.sum(axis=1).max()) * 1.08)
     ax.spines[["top", "right"]].set_visible(False)
     ax.legend(title="Downstream gene", frameon=False, fontsize=7, title_fontsize=7)
     fig.tight_layout()
@@ -2757,3 +2760,454 @@ def plot_score_vs_count_subplots(
         )
 
     return fig
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cell-state composition, force waves and regulatory phases
+# (migrated from ``core.state_dynamics``; binning/ranking stays on those classes)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_PHASE_ROMAN = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V"}
+
+
+def plot_state_composition_bars(df_plot, x, colors=None, n_bins=8, figsize=(6, 4)):
+    """Stacked bar plot of average cell-state composition over binned windows.
+
+    ``df_plot`` is a states x windows count table and ``x`` the matching pseudotime
+    per window (``StateFrequency.fate_trajectory`` output); ``colors`` maps state
+    name to colour.
+    """
+    colors = colors or {}
+    x = np.asarray(x)
+    x_min, x_max = x.min(), x.max()
+
+    bin_edges = np.linspace(x_min, x_max, n_bins + 1)
+
+    binned_data = {state: [0.0] * n_bins for state in df_plot.index}
+    bin_counts = [0] * n_bins
+
+    for i, time_point in enumerate(x):
+        bin_idx = int(np.digitize(time_point, bin_edges) - 1)
+        bin_idx = max(0, min(bin_idx, n_bins - 1))
+        for state in df_plot.index:
+            binned_data[state][bin_idx] += df_plot.loc[state].values[i]
+        bin_counts[bin_idx] += 1
+
+    for state in df_plot.index:
+        for bin_idx in range(n_bins):
+            if bin_counts[bin_idx] > 0:
+                binned_data[state][bin_idx] /= bin_counts[bin_idx]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.grid(False)
+    bottom = [0.0] * n_bins
+    for state in df_plot.index:
+        y = binned_data[state]
+        ax.bar(
+            range(n_bins), y,
+            label=state,
+            color=colors.get(state),
+            bottom=bottom,
+            alpha=0.8,
+        )
+        bottom = [bottom[i] + y[i] for i in range(n_bins)]
+
+    ax.set_xlabel('Binned windows', fontsize=14, fontweight='bold', labelpad=15)
+    ax.set_ylabel('Average Cell Count', fontsize=14, fontweight='bold')
+    ax.set_xticks(range(n_bins))
+    ax.set_xticklabels([f"Bin {i + 1}" for i in range(n_bins)], fontsize=12, fontweight='bold')
+    ax.tick_params(axis='y', labelsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_state_composition_curves(df_plot, x, colors=None, figsize=(15, 8), xlabel='branch'):
+    """Line plot (shaded) of each cell-state count over pseudotime."""
+    colors = colors or {}
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.grid(False)
+    for state in df_plot.index:
+        y = df_plot.loc[state]
+        ax.plot(x, y, label=state, color=colors.get(state), linewidth=2)
+        ax.fill_between(x, y, color=colors.get(state), alpha=0.25)
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel('Cell Count')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_state_extrema(df_plot, x, extrema_info, colors=None, figsize=(15, 8)):
+    """Composition curves annotated with maxima (^) and minima (v) markers.
+
+    ``extrema_info`` is the per-state dict returned by ``StateFrequency.find_extrema``.
+    """
+    colors = colors or {}
+    fig, ax = plt.subplots(figsize=figsize)
+    for state in df_plot.index:
+        y = df_plot.loc[state].values
+        color = colors.get(state)
+        ax.plot(x, y, label=state, color=color, linewidth=2)
+        ax.fill_between(x, y, color=color, alpha=0.2)
+        if len(extrema_info[state]['maxima_window_idx']) > 0:
+            ax.scatter(extrema_info[state]['maxima_pseudotime'],
+                       extrema_info[state]['maxima_count'],
+                       color=color, s=150, marker='^',
+                       edgecolor='black', linewidth=2, zorder=5)
+        if len(extrema_info[state]['minima_window_idx']) > 0:
+            ax.scatter(extrema_info[state]['minima_pseudotime'],
+                       extrema_info[state]['minima_count'],
+                       color=color, s=150, marker='v',
+                       edgecolor='black', linewidth=2, zorder=5)
+
+    ax.set_xlabel('Branch (pseudotime)')
+    ax.set_ylabel('Cell Count')
+    ax.set_title('Cell Counts with Extrema (^=maxima, v=minima)')
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    fig.tight_layout()
+    return fig, ax
+
+
+def plot_gene_trajectories(dy, dx, genes, colors, ylabel, figsize=(8, 6)):
+    """Per-gene curves over pseudotime, each labelled at its right end."""
+    fig = plt.figure(figsize=figsize)
+    ax = plt.gca()
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    for gene, color in zip(genes, colors):
+        if gene in dy.index:
+            ax.plot(dx, dy.loc[gene], linewidth=2, color=color)
+            ax.text(dx.iloc[-1], dy.loc[gene].iloc[-1], f' {gene}',
+                    color=color, verticalalignment='center')
+    ax.set_xlabel('Pseudotime')
+    ax.set_ylabel(ylabel)
+    return fig, ax
+
+
+def plot_phase_binding_boxes(
+    table,
+    phases,
+    cats,
+    colors,
+    full=None,
+    ylabel='TF binding score (in-phase max)',
+    figsize=(8, 6),
+    annotate=False,
+    violin=False,
+    violin_width=1.6,
+    significance_pair=None,
+):
+    """Per-phase box plot of selected TFs' binding scores, grouped by category.
+
+    ``table`` is the long ``phase, category, TF, binding_score`` table from
+    ``BindingPhases.top_tfs_table``; ``phases`` and ``cats`` fix the axis order and
+    ``colors`` gives one colour per category. ``full`` optionally maps
+    ``(phase, category)`` to the in-phase score distribution drawn as a violin behind
+    the box. When ``significance_pair`` names two categories, a Mann-Whitney U bar is
+    drawn per phase between them.
+    """
+    full = {} if full is None else full
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    n = len(cats)
+    width = 0.8 / n
+    for ci, cat in enumerate(cats):
+        offset = (ci - (n - 1) / 2) * width
+        positions, data, names = [], [], []
+        for pi, p in enumerate(phases):
+            sub = table[(table['phase'] == p) & (table['category'] == cat)]
+            positions.append(pi + offset)
+            data.append(sub['binding_score'].values)
+            names.append(list(sub['TF']))
+        if violin:
+            vsets, vpos = [], []
+            for pos, p in zip(positions, phases):
+                d = full.get((p, cat), np.empty(0))
+                if d.size > 1:
+                    vsets.append(d)
+                    vpos.append(pos)
+            if vsets:
+                parts = ax.violinplot(vsets, positions=vpos,
+                                      widths=width * violin_width,
+                                      showextrema=False)
+                for body in parts['bodies']:
+                    body.set_facecolor(colors[ci])
+                    body.set_edgecolor('none')
+                    body.set_alpha(0.25)
+                    body.set_zorder(0)
+        bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color='black'))
+        for patch in bp['boxes']:
+            patch.set_facecolor(colors[ci])
+            patch.set_alpha(0.6)
+        for pos, vals, nm in zip(positions, data, names):
+            if len(vals) == 0:
+                continue
+            x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+            ax.scatter(x, vals, color=colors[ci], edgecolor='black',
+                       linewidth=0.4, s=22, zorder=3)
+            if annotate:
+                for xi, yi, ni in zip(x, vals, nm):
+                    ax.text(xi, yi, f' {ni}', fontsize=7, va='center')
+
+    if significance_pair is not None:
+        c1, c2 = significance_pair
+        off1 = (cats.index(c1) - (n - 1) / 2) * width
+        off2 = (cats.index(c2) - (n - 1) / 2) * width
+        lo, hi = ax.get_ylim()
+        rng = hi - lo
+        bar_top = hi
+        for pi, p in enumerate(phases):
+            d1 = table[(table['phase'] == p)
+                       & (table['category'] == c1)]['binding_score'].values
+            d2 = table[(table['phase'] == p)
+                       & (table['category'] == c2)]['binding_score'].values
+            if d1.size < 1 or d2.size < 1:
+                continue
+            try:
+                _, pval = mannwhitneyu(d1, d2, alternative='two-sided')
+            except ValueError:
+                continue
+            if pval < 1e-4:
+                label = '****'
+            elif pval < 1e-3:
+                label = '***'
+            elif pval < 1e-2:
+                label = '**'
+            elif pval < 0.05:
+                label = '*'
+            else:
+                label = 'ns'
+            top = max(d1.max(), d2.max(),
+                      full.get((p, c1), np.array([-np.inf])).max(),
+                      full.get((p, c2), np.array([-np.inf])).max())
+            h = top + 0.03 * rng
+            tick = 0.015 * rng
+            x1, x2 = pi + off1, pi + off2
+            ax.plot([x1, x1, x2, x2], [h, h + tick, h + tick, h],
+                    color='black', lw=1.0, clip_on=False)
+            ax.text((x1 + x2) / 2, h + tick, label,
+                    ha='center', va='bottom', fontsize=9)
+            bar_top = max(bar_top, h + 2 * tick)
+        ax.set_ylim(lo, bar_top + 0.04 * rng)
+
+    ax.set_xticks(range(len(phases)))
+    ax.set_xticklabels([f'Phase {_PHASE_ROMAN.get(p, p)}' for p in phases])
+    ax.set_ylabel(ylabel)
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[ci], alpha=0.6)
+               for ci in range(n)]
+    ax.legend(handles, cats, frameon=False)
+    return fig, ax
+
+
+def plot_phase_ordered_force_heatmap(
+    dnet,
+    labels,
+    phases,
+    dtime,
+    cmap='RdBu_r',
+    vmax=None,
+    figsize=(4, 6),
+    show_phase_dividers=True,
+    ytick_fontsize=10,
+):
+    """Force heatmap whose rows are already grouped by phase then peak pseudotime.
+
+    ``dnet`` is the (links x windows) force matrix, ``labels`` the ``"TF->Target"``
+    row labels and ``phases`` the phase number of each row (contiguous per block).
+    The colour scale is symmetric so activation and repression read alike.
+    """
+    vmax_val = float(np.abs(dnet).max()) if vmax is None else vmax
+    fig, ax = plt.subplots(figsize=figsize)
+    im = ax.imshow(dnet, aspect='auto', interpolation='none', cmap=cmap,
+                   vmin=-vmax_val, vmax=vmax_val)
+    plt.colorbar(im, ax=ax, label="Force")
+
+    ax.set_xlabel("Pseudotime")
+    num_ticks = min(10, dnet.shape[1])
+    tick_positions = np.linspace(0, dnet.shape[1] - 1, num_ticks, dtype=int)
+    dtime_arr = np.asarray(dtime)
+    ax.set_xticks(tick_positions)
+    ax.set_xticklabels([f"{dtime_arr[i]:.4f}" for i in tick_positions],
+                       rotation=45, ha="right")
+
+    ax.set_yticks(range(len(labels)))
+    ax.set_yticklabels(labels, fontsize=ytick_fontsize)
+
+    if show_phase_dividers:
+        start = 0
+        for phase in sorted(set(phases)):
+            count = phases.count(phase)  # phases is contiguous per block
+            if start > 0:
+                ax.axhline(start - 0.5, color="black", linewidth=1.5)
+            ax.text(0.2, start + 0.05, f"Phase {phase}",
+                    va="top", ha="left", fontsize=ytick_fontsize,
+                    fontweight="bold",
+                    bbox=dict(boxstyle="round", fc="white", ec="black", alpha=0.8))
+            start += count
+
+    plt.tight_layout()
+    return fig, ax
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Enriched-vs-random force validation boxes (migrated from ``core.validation``)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def plot_force_validation_boxes(df, figsize=(5, 6), ylabel='Abs max TF force',
+                                colors=('#d1495b', '#9aa0a6')):
+    """Two-box (enriched vs random) plot of ``abs_max_force`` from a tidy table."""
+    groups = [('enriched', 'Enriched (FireFate)'),
+              ('random', 'Random (non-enriched)')]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    data = [df[df['group'] == g]['abs_max_force'].values for g, _ in groups]
+    bp = ax.boxplot(data, positions=[0, 1], widths=0.5, patch_artist=True,
+                    showfliers=False, medianprops=dict(color='black'))
+    for patch, c in zip(bp['boxes'], colors):
+        patch.set_facecolor(c)
+        patch.set_alpha(0.6)
+    for pos, (vals, c) in enumerate(zip(data, colors)):
+        if len(vals) == 0:
+            continue
+        x = pos + (np.random.rand(len(vals)) - 0.5) * 0.25
+        ax.scatter(x, vals, color=c, edgecolor='black', linewidth=0.4, s=22, zorder=3)
+
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels([label for _, label in groups])
+    ax.set_ylabel(ylabel)
+    return fig, ax
+
+
+def plot_force_validation_multi(df, group_order, group_labels=None, figsize=(7, 6),
+                                ylabel='abs(max TF-force)', colors=None):
+    """One box per group in ``group_order`` from a ``compare_sets`` table."""
+    if group_labels is None:
+        group_labels = list(group_order)
+    if colors is None:
+        base = ['#d1495b', '#edae49', '#66a182', '#2e4057', '#9aa0a6']
+        colors = [base[i % len(base)] for i in range(len(group_order))]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    data = [df[df['group'] == g]['abs_max_force'].values for g in group_order]
+    positions = list(range(len(group_order)))
+    bp = ax.boxplot(data, positions=positions, widths=0.5, patch_artist=True,
+                    showfliers=False, medianprops=dict(color='black'))
+    for patch, c in zip(bp['boxes'], colors):
+        patch.set_facecolor(c)
+        patch.set_alpha(0.6)
+    for pos, (vals, c) in enumerate(zip(data, colors)):
+        if len(vals) == 0:
+            continue
+        x = pos + (np.random.rand(len(vals)) - 0.5) * 0.25
+        ax.scatter(x, vals, color=c, edgecolor='black', linewidth=0.4, s=22, zorder=3)
+
+    ax.set_xticks(positions)
+    ax.set_xticklabels(group_labels)
+    ax.set_ylabel(ylabel)
+    return fig, ax
+
+
+def plot_force_validation_by_phase(df, branch, group_order, group_labels=None,
+                                   figsize=(9, 6), ylabel='Abs max TF force',
+                                   colors=None, xlabel=None):
+    """Grouped box plot for ONE branch from a ``compare_sets_by_phase`` table."""
+    sub = df[df['branch'] == branch]
+    phases = sorted(sub['phase'].unique())
+    if group_labels is None:
+        group_labels = list(group_order)
+    if colors is None:
+        base = ['#d1495b', '#edae49', '#9aa0a6', '#66a182', '#2e4057']
+        colors = [base[i % len(base)] for i in range(len(group_order))]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    n = len(group_order)
+    width = 0.8 / n
+    for gi, g in enumerate(group_order):
+        offset = (gi - (n - 1) / 2) * width
+        positions, data = [], []
+        for pi, p in enumerate(phases):
+            vals = sub[(sub['phase'] == p) & (sub['group'] == g)]['abs_max_force'].values
+            positions.append(pi + offset)
+            data.append(vals)
+        bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color='black'))
+        for patch in bp['boxes']:
+            patch.set_facecolor(colors[gi])
+            patch.set_alpha(0.6)
+        for pos, vals in zip(positions, data):
+            if len(vals) == 0:
+                continue
+            x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+            ax.scatter(x, vals, color=colors[gi], edgecolor='black',
+                       linewidth=0.4, s=22, zorder=3)
+
+    ax.set_xticks(range(len(phases)))
+    ax.set_xticklabels(xlabel if xlabel is not None
+                       else [f'Phase {_PHASE_ROMAN.get(p, p)}' for p in phases])
+    ax.set_ylabel(ylabel)
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
+               for gi in range(n)]
+    ax.legend(handles, group_labels, frameon=False)
+    return fig, ax
+
+
+def plot_force_validation_phase_cells(df, figsize=(9, 6), ylabel='Abs max TF force',
+                                      colors=('#d1495b', '#9aa0a6')):
+    """Enriched vs random boxes, one group per branch-qualified phase (``PB-1``, ...)."""
+    cells = sorted(set(zip(df['branch'], df['phase'])))
+    groups = [('enriched', 'Enriched (FireFate)'),
+              ('random', 'Random (non-enriched)')]
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    for gi, (g, _label) in enumerate(groups):
+        offset = (gi - 0.5) * width
+        positions, data = [], []
+        for ci, (branch, p) in enumerate(cells):
+            vals = df[(df['branch'] == branch) & (df['phase'] == p)
+                      & (df['group'] == g)]['abs_max_force'].values
+            positions.append(ci + offset)
+            data.append(vals)
+        bp = ax.boxplot(data, positions=positions, widths=width * 0.9,
+                        patch_artist=True, showfliers=False,
+                        medianprops=dict(color='black'))
+        for patch in bp['boxes']:
+            patch.set_facecolor(colors[gi])
+            patch.set_alpha(0.6)
+        # one jittered point per link
+        for pos, vals in zip(positions, data):
+            if len(vals) == 0:
+                continue
+            x = pos + (np.random.rand(len(vals)) - 0.5) * width * 0.5
+            ax.scatter(x, vals, color=colors[gi], edgecolor='black',
+                       linewidth=0.4, s=22, zorder=3)
+
+    ax.set_xticks(range(len(cells)))
+    ax.set_xticklabels([f'{b}-{p}' for b, p in cells])
+    ax.set_ylabel(ylabel)
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=colors[gi], alpha=0.6)
+               for gi in range(len(groups))]
+    ax.legend(handles, [label for _, label in groups], frameon=False)
+    return fig, ax
