@@ -11,23 +11,22 @@ work from flat CSVs:
   red = positively correlated with the LF, blue = negative, gray = not an LF gene.
 
 Bar height is the TF's enrichment score; each bar is stacked into red/blue/gray
-segments proportional to that TF's downstream gene composition.
+segments proportional to that TF's downstream gene composition. The figures
+themselves live in :mod:`firefate.utils.plots`; this module builds their input.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Iterable
 
-import matplotlib.pyplot as plt
 import pandas as pd
 
-COLOR_MAP = {"red": "#c1272d", "blue": "#2b6cb0", "gray": "#b0b0b0"}
-_COLOR_ORDER = ["red", "blue", "gray"]
-_COLOR_LABELS = {
-    "red": "positively correlated LF gene",
-    "blue": "negatively correlated LF gene",
-    "gray": "not an LF gene",
-}
+from firefate.utils.plots import (  # noqa: F401  (re-exported for existing call sites)
+    COLOR_MAP,
+    _COLOR_ORDER,
+    plot_tf_enrichment_bars,
+    plotly_tf_enrichment_bars,
+)
 
 
 def load_lf_gene_colors(
@@ -136,113 +135,6 @@ def build_tf_color_bar_table(
     plot_df["text"] = (plot_df["proportion"] * 100).round(1).astype(str) + "%"
     plot_df["source"] = pd.Categorical(plot_df["source"], categories=order, ordered=True)
     return plot_df.sort_values(["source", "color"]).reset_index(drop=True)
-
-
-def plot_tf_enrichment_bars(
-    plot_df: pd.DataFrame,
-    title: str,
-    out_path: str | Path | None = None,
-    *,
-    min_label_proportion: float = 0.08,
-    figsize: tuple[float, float] | None = None,
-) -> tuple[Any, Any]:
-    """Stacked bar of enrichment score per TF, split by LF correlation sign.
-
-    Segments smaller than ``min_label_proportion`` of the bar are left unlabelled so
-    the in-bar percentages stay readable. Saves vector output (SVG/PDF) when
-    ``out_path`` is given.
-    """
-    wide = (
-        plot_df.pivot(index="source", columns="color", values="height")
-        .reindex(columns=_COLOR_ORDER, fill_value=0.0)
-        .fillna(0.0)
-    )
-    props = (
-        plot_df.pivot(index="source", columns="color", values="proportion")
-        .reindex(columns=_COLOR_ORDER, fill_value=0.0)
-        .fillna(0.0)
-    )
-    tfs = list(wide.index)
-
-    if figsize is None:
-        figsize = (max(6.0, 0.28 * len(tfs) + 2.0), 4.5)
-    fig, ax = plt.subplots(figsize=figsize)
-
-    bottom = pd.Series(0.0, index=wide.index)
-    for color in _COLOR_ORDER:
-        heights = wide[color]
-        if heights.sum() == 0:
-            continue
-        ax.bar(
-            tfs,
-            heights,
-            bottom=bottom,
-            color=COLOR_MAP[color],
-            label=_COLOR_LABELS[color],
-            width=0.8,
-        )
-        for tf in tfs:
-            if props.loc[tf, color] >= min_label_proportion:
-                ax.text(
-                    tf,
-                    bottom[tf] + heights[tf] / 2,
-                    f"{props.loc[tf, color] * 100:.0f}%",
-                    ha="center",
-                    va="center",
-                    fontsize=5,
-                    color="white",
-                )
-        bottom = bottom + heights
-
-    ax.set_xlabel("Transcription factor (TF)")
-    ax.set_ylabel("Enrichment score")
-    ax.set_title(title)
-    ax.tick_params(axis="x", rotation=90, labelsize=6)
-    ax.set_ylim(0, float(wide.sum(axis=1).max()) * 1.08)
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.legend(title="Downstream gene", frameon=False, fontsize=7, title_fontsize=7)
-    fig.tight_layout()
-
-    if out_path is not None:
-        out_path = Path(out_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out_path, dpi=300)
-    return fig, ax
-
-
-def plotly_tf_enrichment_bars(plot_df: pd.DataFrame, title: str) -> Any:
-    """Interactive plotly version of :func:`plot_tf_enrichment_bars` (notebook display).
-
-    Static export via ``fig.write_image`` needs kaleido + Chrome (``plotly_get_chrome``);
-    use :func:`plot_tf_enrichment_bars` for file output instead.
-    """
-    import plotly.express as px
-
-    data = plot_df.copy()
-    data.loc[data["proportion"] == 0, "text"] = ""
-    fig = px.bar(
-        data,
-        x="source",
-        y="height",
-        color="color",
-        text="text",
-        color_discrete_map=COLOR_MAP,
-        category_orders={"color": _COLOR_ORDER},
-        labels={"height": "Enrichment score", "source": "TF"},
-        title=title,
-    )
-    fig.update_traces(textposition="inside", insidetextanchor="middle")
-    fig.update_layout(
-        xaxis_title="Transcription factor (TF)",
-        yaxis_title="Enrichment score",
-        xaxis_tickangle=-90,
-        font=dict(family="Arial", size=8, color="black"),
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="white",
-        xaxis=dict(showgrid=False, showline=True, linecolor="black", ticks="outside"),
-        yaxis=dict(showgrid=False, showline=True, linecolor="black", ticks="outside"),
-    )
-    return fig
 
 
 def plot_episode_from_csvs(

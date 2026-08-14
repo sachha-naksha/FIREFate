@@ -26,6 +26,10 @@ from tqdm import tqdm
 
 from firefate.core.stat_extensions import lcpm_tf
 from firefate.utils.custom import *
+from firefate.utils.plots import (
+    plot_chromatin_tf_dynamics,
+    plot_score_vs_count_subplots,
+)
 
 
 class SmoothedCurvesGRN:
@@ -808,8 +812,8 @@ class SmoothedCurvesChromatin:
     # Visualization Methods
     # ------------------------------------------------------------------
 
-    def plot(self, 
-             categories: Dict[str, Dict[str, str]], 
+    def plot(self,
+             categories: Dict[str, Dict[str, str]],
              y_label: str = "Binding Score",
              title: str = None,
              truncate_pb: bool = True) -> go.Figure:
@@ -829,71 +833,16 @@ class SmoothedCurvesChromatin:
         if not self.series_pb:
             raise ValueError("No processed data found. Call process_dynamics() first.")
 
-        # Determine truncation mask; as both branches are not same length, truncate the longer one
-        mask_pb = np.ones(len(self.pb_pseudotime), dtype=bool)
-        max_gc_time = np.nanmax(self.gc_pseudotime)
-        
-        if truncate_pb:
-            mask_pb = self.pb_pseudotime <= max_gc_time
-
-        fig = go.Figure()
-
-        # Iterate through categories (e.g., Static, Episodic)
-        for cat_name, tf_color_map in categories.items():
-            first_in_cat = True
-            
-            for tf, color in tf_color_map.items():
-                if tf not in self.series_pb:
-                    print(f"Warning: {tf} not found in processed data.")
-                    continue
-
-                # Add GC Trace (Dashed)
-                fig.add_trace(go.Scatter(
-                    x=self.gc_pseudotime,
-                    y=self.series_gc[tf],
-                    mode='lines',
-                    name=tf,
-                    line=dict(dash='dash', color=color, width=2.5),
-                    legendgroup=tf,
-                    legendgrouptitle_text=cat_name if first_in_cat else None,
-                    showlegend=True
-                ))
-
-                # Add PB Trace (Solid)
-                fig.add_trace(go.Scatter(
-                    x=self.pb_pseudotime[mask_pb],
-                    y=self.series_pb[tf][mask_pb],
-                    mode='lines',
-                    name=tf,
-                    line=dict(dash='solid', color=color, width=2.5),
-                    legendgroup=tf,
-                    showlegend=False
-                ))
-                
-                first_in_cat = False
-
-        # Layout styling
-
-        fig.update_layout(
-            title=dict(text=title, x=0.5),
-            xaxis=dict(
-                title='Pseudotime',
-                showgrid=True,
-                range=[0, max_gc_time if truncate_pb else None]
-            ),
-            yaxis=dict(title=y_label),
-            legend=dict(
-                orientation='v', x=1.02, y=0.5,
-                tracegroupgap=25,
-                title_text="<b>TF Categories</b><br>(Solid=PB, Dashed=GC)"
-            ),
-            margin=dict(t=100, r=250),
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            font=dict(family="Arial, sans-serif")
+        return plot_chromatin_tf_dynamics(
+            self.pb_pseudotime,
+            self.gc_pseudotime,
+            self.series_pb,
+            self.series_gc,
+            categories,
+            y_label=y_label,
+            title=title,
+            truncate_pb=truncate_pb,
         )
-
-        return fig
 
     def plot_score_vs_count_comparison(self,
         categories: Dict[str, Dict[str, str]],
@@ -901,110 +850,27 @@ class SmoothedCurvesChromatin:
         subplot_cols: int = 3,
         title: str = None,
         ) -> go.Figure:
-
+        """Per-TF comparison of GC binding score against OCR count (both min-max scaled)."""
         if not self.raw_scores or not self.raw_counts:
             raise ValueError("No raw data found. Call extract_data() first.")
         if self.gc_indices is None:
             raise ValueError("Trajectories not set. Call set_trajectory_info() first.")
 
         tf_color_map = {tf: color for cat in categories.values() for tf, color in cat.items()}
-        tf_list = list(tf_color_map.keys())
 
-        n_cols = subplot_cols
-        n_rows = math.ceil(len(tf_list) / n_cols)
-
-        fig = make_subplots(
-            rows=n_rows, cols=n_cols,
-            subplot_titles=tf_list,
-            shared_xaxes=False,
-            vertical_spacing=0.12,
-            horizontal_spacing=0.08,
-        )
-
-        x_gc = self.gc_pseudotime
-
-        def minmax(arr):
-            lo, hi = np.nanmin(arr), np.nanmax(arr)
-            denom = hi - lo if (hi - lo) != 0 else 1.0
-            return (arr - lo) / denom
-
-        for idx, tf in enumerate(tf_list):
-            row = idx // n_cols + 1
-            col = idx % n_cols + 1
-            color = tf_color_map[tf]
-
+        series_by_tf = {}
+        for tf in tf_color_map:
             score_vals = np.array([self._to_float(v) for v in self.raw_scores.get(tf, [])])
             count_vals = np.array([self._to_float(v) for v in self.raw_counts.get(tf, [])])
+            series_by_tf[tf] = (
+                self._smooth(score_vals[self.gc_indices], sigma=smooth_sigma),
+                self._smooth(count_vals[self.gc_indices], sigma=smooth_sigma),
+            )
 
-            gc_score = self._smooth(score_vals[self.gc_indices], sigma=smooth_sigma)
-            gc_count = self._smooth(count_vals[self.gc_indices], sigma=smooth_sigma)
-
-            norm_score = minmax(gc_score)
-            norm_count = minmax(gc_count)
-
-            show_legend = idx == 0
-
-            fig.add_trace(go.Scatter(
-                x=x_gc, y=norm_score, mode="lines",
-                name="TF Binding Score",
-                line=dict(color=color, width=2.5, dash="solid"),
-                legendgroup="score", showlegend=show_legend,
-            ), row=row, col=col)
-
-            fig.add_trace(go.Scatter(
-                x=x_gc, y=norm_count, mode="lines",
-                name="OCR Count",
-                line=dict(color="grey", width=2, dash="dash"),
-                legendgroup="count", showlegend=show_legend,
-            ), row=row, col=col)
-
-            fig.add_trace(go.Scatter(
-                x=np.concatenate([x_gc, x_gc[::-1]]),
-                y=np.concatenate([
-                    np.where(norm_count > norm_score, norm_count, norm_score),
-                    np.where(norm_count > norm_score, norm_score, norm_score)[::-1],
-                ]),
-                fill="toself", fillcolor="rgba(180,180,180,0.18)",
-                line=dict(width=0),
-                name="Count > Score region",
-                legendgroup="shade", showlegend=show_legend,
-                hoverinfo="skip",
-            ), row=row, col=col)
-
-        fig.update_layout(
-            title=dict(text=title, x=0.5, font=dict(size=15)),
-            height=320 * n_rows,
-            width=420 * n_cols,
-            template="none",
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            font=dict(family="Arial, sans-serif", size=11),
-            legend=dict(
-                orientation="h", x=0.5, xanchor="center", y=-0.05,
-                title_text="<b>— Binding Score &nbsp;&nbsp; -- OCR Count</b>",
-            ),
+        return plot_score_vs_count_subplots(
+            self.gc_pseudotime,
+            series_by_tf,
+            tf_color_map,
+            subplot_cols=subplot_cols,
+            title=title,
         )
-
-        # Global wipe first — must come before per-subplot calls
-        fig.update_xaxes(showgrid=False, zeroline=False)
-        fig.update_yaxes(showgrid=False, zeroline=False)
-
-        for i in range(1, n_rows * n_cols + 1):
-            r, c = (i - 1) // n_cols + 1, (i - 1) % n_cols + 1
-            fig.update_xaxes(
-                title_text="Pseudotime" if i > (n_rows - 1) * n_cols else "",
-                showline=True, linecolor="black", linewidth=1.5, mirror=False,
-                zeroline=False,
-                row=r, col=c,
-            )
-            fig.update_yaxes(
-                title_text="Relative value [0–1]" if (i - 1) % n_cols == 0 else "",
-                range=[-0.05, 1.1],
-                showline=True, linecolor="black", linewidth=1.5, mirror=False,
-                zeroline=False,
-                row=r, col=c,
-            )
-
-        return fig
-        
-    
