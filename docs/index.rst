@@ -33,6 +33,13 @@ This site hosts the user guide and Python API reference for the ``firefate`` pac
 
       Auto-generated documentation for submodules and public classes.
 
+   .. grid-item-card:: Notebooks
+      :link: notebooks/index
+      :link-type: doc
+
+      Analysis notebooks for each module, from the companion
+      `firefate_notebooks <https://github.com/sachha-naksha/firefate_notebooks>`_ repository.
+
    .. grid-item-card:: Repository
       :link: https://github.com/sachha-naksha/FIREFate
       :link-type: url
@@ -47,6 +54,13 @@ This site hosts the user guide and Python API reference for the ``firefate`` pac
    installation
    capabilities
    methods
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Notebooks
+   :hidden:
+
+   notebooks/index
 
 .. toctree::
    :maxdepth: 2

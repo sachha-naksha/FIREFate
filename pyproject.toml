@@ -19,6 +19,7 @@ dependencies = [
     "tqdm>=4.65",
     "joblib>=1.3",
     "networkx>=3.0",
+    "h5py>=3.8",
     "pyyaml>=6.0",
 ]
 
@@ -32,6 +33,8 @@ docs = [
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.0",
     "sphinx-autobuild>=2024.0.0",
+    # renders the firefate_notebooks submodule at docs/notebooks
+    "myst-nb>=1.1",
 ]
 
 [tool.setuptools.packages.find]

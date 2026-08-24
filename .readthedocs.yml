@@ -1,0 +1,29 @@
+# Read the Docs build configuration.
+# Docs: https://docs.readthedocs.io/en/stable/config-file/v2.html
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.12"
+
+sphinx:
+  builder: html
+  configuration: docs/conf.py
+  # The notebooks carry arbitrary authored markdown and stored outputs; a single
+  # broken cross-reference in one of them should not fail the whole build.
+  # Tighten this to `true` once the notebook prose is warning-clean.
+  fail_on_warning: false
+
+python:
+  install:
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
+
+# The notebooks live in their own repository and are rendered from here.
+submodules:
+  include:
+    - docs/notebooks
+  recursive: false

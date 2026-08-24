@@ -18,17 +18,40 @@ Downstream tasks include -
 
 6. Quantification of in-silico perturbation effects from state-specific (DONE) /dynamic phenotypic shifts (TO-DO) induced by perturbing enriched TFs.
 
+## Notebooks
+
+The analysis notebooks live in a companion repository,
+[**firefate_notebooks**](https://github.com/sachha-naksha/firefate_notebooks), and are
+pulled in here as a git submodule at `docs/notebooks` so the documentation can render
+them. Clone with them:
+
+```bash
+git clone --recurse-submodules https://github.com/sachha-naksha/FIREFate
+```
+
+If you already cloned without them:
+
+```bash
+git submodule update --init docs/notebooks
+```
+
+The submodule is optional — the package installs and the API docs build without it.
+
 ## Documentation
 
-User guide and API reference are built with Sphinx and hosted on **Read the Docs** (configure the
-project at [readthedocs.org](https://readthedocs.org/) to point at this repository; the config file
-is `.readthedocs.yaml`). After publishing, the site is typically available at
-[https://firefate.readthedocs.io/](https://firefate.readthedocs.io/) when the project slug is
-`firefate`.
+User guide, API reference and the rendered notebooks are built with Sphinx and hosted on
+**Read the Docs**. The build is configured by `.readthedocs.yml`, which also tells Read the Docs to
+check out the `docs/notebooks` submodule. Point a project at this repository at
+[readthedocs.org](https://readthedocs.org/); with the slug `firefate` the site lands at
+[https://firefate.readthedocs.io/](https://firefate.readthedocs.io/).
 
 To build the HTML docs locally:
 
 ```bash
+git submodule update --init docs/notebooks   # optional; without it the API docs still build
 pip install ".[docs]"
-sphinx-build -W -b html docs docs/_build/html
+sphinx-build -b html docs docs/_build/html
 ```
+
+Notebooks are rendered from their stored outputs and are never executed
+(`nb_execution_mode = "off"`), so the build needs no data and no GPU.
