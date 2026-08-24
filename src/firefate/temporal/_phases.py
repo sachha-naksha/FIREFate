@@ -143,20 +143,24 @@ def order_links(force_curves, dtime, top_k=5, temperature=1.0, method='weighted_
     """
     Convenience wrapper: compute the phase ordering of links directly from force curves.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     force_curves : DataFrame
-        Multi-indexed (TF, Target) force curves over pseudotime
+        Multi-indexed (TF, Target) force curves over pseudotime.
     dtime : array-like
-        Pseudotime values per column/window
-    top_k, temperature : softmax parameters passed to get_max_points
-    method : aggregation method passed to aggregate_max_points
+        Pseudotime values per column/window.
+    top_k, temperature :
+        Softmax parameters passed to :func:`get_max_points`.
+    method :
+        Aggregation method passed to :func:`aggregate_max_points`.
 
-    Returns:
-    --------
-    (ordered_links, regulation_pseudotimes)
-        ordered_links : list of (TF, Target) tuples sorted by peak pseudotime
-        regulation_pseudotimes : dict from aggregate_max_points
+    Returns
+    -------
+    tuple
+        ``(ordered_links, regulation_pseudotimes)``:
+
+        * ``ordered_links`` -- list of ``(TF, Target)`` tuples sorted by peak pseudotime.
+        * ``regulation_pseudotimes`` -- dict from :func:`aggregate_max_points`.
     """
     max_points = get_max_points(force_curves, dtime, top_k=top_k, temperature=temperature)
     regulation_pseudotimes = aggregate_max_points(max_points, method=method)
@@ -682,11 +686,13 @@ def plot_force_heatmap_by_phase(
 
     Returns
     -------
-    (ordered_df, phases, fig)
-        ordered_df : DataFrame of force values, rows phase-then-peak ordered,
-            indexed by ``"TF->Target"`` labels, columns the pseudotimes.
-        phases : list of phase numbers aligned with ``ordered_df`` rows.
-        fig : matplotlib Figure, or ``None`` when ``plot_figure`` is False.
+    tuple
+        ``(ordered_df, phases, fig)``:
+
+        * ``ordered_df`` -- DataFrame of force values, rows phase-then-peak ordered,
+          indexed by ``"TF->Target"`` labels, columns the pseudotimes.
+        * ``phases`` -- list of phase numbers aligned with ``ordered_df`` rows.
+        * ``fig`` -- matplotlib Figure, or ``None`` when ``plot_figure`` is False.
     """
     existing_links = [link for link in links if link in force_curves.index]
     if not existing_links:

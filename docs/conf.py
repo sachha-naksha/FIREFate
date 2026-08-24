@@ -21,8 +21,10 @@ version = release
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
     "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
     "sphinx_copybutton",
     "sphinx_design",
     # Renders the notebooks pulled in from the firefate_notebooks submodule.
@@ -63,6 +65,7 @@ exclude_patterns = [
 html_theme = "furo"
 html_title = f"{project} {release}"
 html_static_path = ["_static"]
+html_logo = "_static/img/fig_1_bio.png"
 
 nitpicky = False
 
@@ -72,12 +75,17 @@ nitpick_ignore = [
     ("py:class", "dynamic_network"),
 ]
 
-autodoc_default_options = {
-    "members": True,
-    "undoc-members": True,
-    "show-inheritance": True,
-    "inherited-members": False,
-}
+# The user/ and developer/ pages list members with autosummary and let it generate a
+# page per class from _templates/autosummary/class.rst.
+autosummary_generate = True
+autosummary_generate_overwrite = True
+
+# No autodoc_default_options: members are listed by the autosummary rubrics in
+# _templates/autosummary/class.rst, which generates a page per method. Turning on
+# `members` here as well documents every method twice and Sphinx flags each one as a
+# duplicate object description.
+autodoc_member_order = "alphabetical"
+autodoc_typehints = "description"
 
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True

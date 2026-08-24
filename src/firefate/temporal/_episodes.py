@@ -580,11 +580,14 @@ def plot_tf_episodic_enrichment_dotplot(
     """
     Plots a dotplot for TF episodic enrichment.
     
-    Parameters:
-    -----------
+    Parameters
+    ----------
     horizontal_layout : bool, default False
         If True, episodes are on y-axis (top to bottom) and TFs on x-axis (left to right).
         If False (default), TFs are on y-axis and episodes on x-axis.
+
+    Notes
+    -----
     When tf_order is None and sort_by_gene_similarity is False, TFs are ordered by the
     episode in which they peak: all TFs peaking in episode 1 first, then episode 2, etc.
     The peak episode is the one with the highest enrichment score among that TF's

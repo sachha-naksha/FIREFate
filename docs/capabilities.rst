@@ -36,4 +36,4 @@ Implementation note
 
 The pip-installable package under ``src/firefate/`` is growing toward full coverage of all seven
 capabilities. Episodic dynamics, smoothed GRN curves, enrichment orchestration, and state-specific
-GRN helpers are represented in the current API; see :doc:`reference` for module-level detail.
+GRN helpers are represented in the current API; see the :doc:`user API <user/index>` for module-level detail.
