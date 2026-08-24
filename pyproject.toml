@@ -7,7 +7,7 @@ name = "firefate"
 version = "0.0.1"
 description = "FIREFate: Functional and Interpretable Regulatory Encoding of cell Fate decisions"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Akanksha Sachan" }]
 dependencies = [
@@ -19,6 +19,7 @@ dependencies = [
     "tqdm>=4.65",
     "joblib>=1.3",
     "networkx>=3.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]

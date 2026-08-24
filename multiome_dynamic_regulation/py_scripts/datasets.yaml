@@ -1,0 +1,61 @@
+# Dataset locations for the multiome dynamic-regulation notebooks.
+#
+# Read with:
+#     from firefate.io import DatasetPaths
+#     paths = DatasetPaths.from_yaml("datasets.yaml")
+#     paths.OUTPUT_FOLDER      # a scalar
+#     paths.PB["ep1"]          # a group, keyed ep1..epN
+#
+# These are cluster-specific and deliberately live outside src/firefate/ so the
+# package stays installable anywhere. Edit them, don't edit the package.
+#
+# NOTE: the tcell root below is a PSC/ocean path that does not resolve on the
+# current cluster. It is carried over verbatim from the old analysis/config.py;
+# repoint it before running the T-cell notebooks.
+
+roots:
+  bcell: /work/nvme/bhdw/asachan/data_files/firefate/bcell
+  tcell: /ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc
+  figures: /projects/bhdw/asachan/papers/firefate/figures
+  inputs: "{bcell}/outs/intermediate_tmp_files"
+  enrichment: "{bcell}/outs/intermediate_tmp_files/direct_effect_enrichment"
+
+scalars:
+  # roots, exposed so notebooks can build ad-hoc paths
+  BCELL_BASE: "{bcell}"
+  TCELL_BASE: "{tcell}"
+
+  OUTPUT_FOLDER: "{figures}"
+  INPUT_FOLDER: "{inputs}"
+  CELL_LABELS: "{bcell}/data/clusters.csv"
+
+groups:
+  # State-discriminative latent factors, per branch
+  PB:
+    template: "{enrichment}/enrichment_ep{i}_pb.csv"
+    n_episodes: 4
+  GC:
+    template: "{enrichment}/enrichment_ep{i}_gc.csv"
+    n_episodes: 4
+
+  # TF knockouts (B cell)
+  IRF4:
+    template: "{inputs}/irf4_ko/gc_98/enrichment_episode_{i}.csv"
+    n_episodes: 8
+  BLIMP1:
+    template: "{inputs}/prdm1_ko/gc_98/enrichment_episode_{i}.csv"
+    n_episodes: 8
+
+  # TF knockouts (T cell)
+  ETS1_SIG:
+    template: "{tcell}/output/ets1/sig_LFs/enrichment_episode_{i}.csv"
+    n_episodes: 6
+  ETS1_ALL:
+    template: "{tcell}/output/ets1/all_lfs/enrichment_episode_{i}.csv"
+    n_episodes: 6
+  IKZF1_SIG:
+    template: "{tcell}/output/ikzf1/sig_lfs/enrichment_episode_{i}.csv"
+    n_episodes: 6
+  IKZF1_ALL:
+    template: "{tcell}/output/ikzf1/all_lfs/enrichment_episode_{i}.csv"
+    n_episodes: 6

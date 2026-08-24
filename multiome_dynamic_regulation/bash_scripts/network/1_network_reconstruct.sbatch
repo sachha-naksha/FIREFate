@@ -8,7 +8,8 @@
 
 # Set working directory
 WORK_DIR="/ocean/projects/cis240075p/asachan/datasets/B_Cell/T_cell/outs/dictys/rbpj_ntc"
-SCRIPT_PATH="/ocean/projects/cis240075p/asachan/bio_informatics_analysis/B_Cells_human_analysis/src/multiome_dynamic_regulation/py_scripts/dynamic_grn/network_reconstruct_batch.py"
+# Now a package entry point (was py_scripts/dynamic_grn/network_reconstruct_batch.py).
+# Requires `pip install -e .` from the FIREFate repo root in the dictys env.
 cd $WORK_DIR || { echo "Error: Could not change directory to $WORK_DIR"; exit 1; }
 
 # Load necessary modules and activate the environment (if required)
@@ -69,7 +70,7 @@ module load anaconda3/2022.10
 source activate dictys
 
 # Run Python script for this batch of windows
-python3 $SCRIPT_PATH $current_window $upper_limit $WORK_DIR
+python3 -m firefate.cli.reconstruct_networks $current_window $upper_limit $WORK_DIR
 EOF
 
     # Update current window for the next batch

@@ -1,5 +1,11 @@
 # FIREFate Architecture
 
+> **Sections 6 and 10 are superseded** by `references/module_structure_plan.md`, which
+> restructures the package along the three FIREFate modules (Temporal, StateSpecific,
+> CrossPrediction) instead of the capability-per-subpackage split described below.
+> Sections 1-5, 7 and 8 (design principles, src-layout, composition over inheritance,
+> managers, types, logging) still hold and the new layout follows them.
+
 Design principles and code structure for FIREFate. Read before any refactor, module addition, or
 "how should I organize this" question.
 
