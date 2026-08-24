@@ -10,10 +10,10 @@ build:
 sphinx:
   builder: html
   configuration: docs/conf.py
-  # The notebooks carry arbitrary authored markdown and stored outputs; a single
-  # broken cross-reference in one of them should not fail the whole build.
-  # Tighten this to `true` once the notebook prose is warning-clean.
-  fail_on_warning: false
+  # Strict: the three cosmetic notebook-content warnings are suppressed in conf.py,
+  # so anything left is a real problem -- a broken cross-reference, a missing
+  # document, a failed autodoc import.
+  fail_on_warning: true
 
 python:
   install:

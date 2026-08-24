@@ -48,6 +48,17 @@ myst_heading_anchors = 3
 # Cell outputs from the trajectory notebooks are large; do not truncate them silently.
 nb_output_stderr = "remove"
 
+# The only warnings the notebooks still raise come from their own authored content and
+# say nothing about the docs: heading levels that jump (## straight to ####), plotly's
+# JSON mime type, and pygments failing to lex `%%bash` / `!command` magics as Python.
+# Silencing exactly these three lets fail_on_warning stay on, so a genuinely broken
+# cross-reference or a failed autodoc import breaks the build instead of hiding in noise.
+suppress_warnings = [
+    "myst.header",
+    "mystnb.unknown_mime_type",
+    "misc.highlighting_failure",
+]
+
 # Dictys is required at runtime for episodic workflows but is not a declared pip dependency;
 # mock it so API docs build on Read the Docs without extra installs.
 autodoc_mock_imports = ["dictys"]
