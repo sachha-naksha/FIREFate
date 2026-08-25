@@ -59,7 +59,7 @@ src/firefate/
 │   │   ├── _stats.py            # lcpm_tf, ChromatinGRNStat                        [core/stat_extensions.py]
 │   │   └── _reconstruct.py      # reconstruct() wrapper                    [network_reconstruct_batch.py]
 │   ├── celloracle/              # links → GRN tables, in-silico KO         [grn/state_specific.py, 05_sim]
-│   └── slide/                   # R SLIDE / ESCAPE subprocess wrappers     [SLIDE/*.R, ESCAPE/ESCAPE.R]
+│   └── slide/                   # R SLIDE / ESCAPE subprocess wrappers  [Cross_prediction/{SLIDE,ESCAPE}/*.R]
 │
 ├── temporal/                    # ============ FIREFateTemporal ============
 │   ├── __init__.py
@@ -272,8 +272,8 @@ pre-refactor baseline -- plus every one of the 46 modules importing cleanly and 
    the StateSpecific port. `backends/dictys/` is real and holds three modules.
 
 4. **`cross_prediction/` is a documented empty package.** Its logic lives in
-   `SLIDE/Crossprediction.R` and `TF_Dynamic_Activity/`, neither of which is Python.
-   `__init__.py` says so and exports nothing.
+   `Cross_prediction/SLIDE/Crossprediction.R` and `TF_Dynamic_Activity/`, neither
+   of which is Python. `__init__.py` says so and exports nothing.
 
 5. **`state_specific/_slide.py` stayed separate** rather than merging into
    `_enrichment.py`. Two private modules under one public `__init__` is the moscot
