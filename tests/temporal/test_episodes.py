@@ -320,33 +320,15 @@ class TestComputeTfExpression:
     def test_result_is_stored(self, filtered):
         assert filtered.compute_tf_expression() is filtered.tf_lcpm_episode
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="ISSUES.md #3 (CONFIRMED, high; fix drafted in ISSUES.md) -- "
-               "compute_tf_expression always takes the FIRST n columns of the "
-               "pseudotime expression curve (``iloc[:, 0:n_time_cols]``) and relabels "
-               "them time_0..time_n, regardless of which time_slice build_episode_grn "
-               "used.  For any episode other than the first, the regulator expression "
-               "is taken from the wrong stretch of pseudotime; the episode's time_slice "
-               "is not even stored on the object.  When the fix lands, drop this marker "
-               "and delete test_currently_reuses_the_first_time_points_for_every_episode.",
-    )
     def test_expression_is_taken_from_the_episode_s_own_time_window(self, episode):
+        # ISSUES.md #3, FIXED: build_episode_grn now records the episode's time_slice
+        # and compute_tf_expression slices the expression curve with it.
         episode.compute_expression_curves()
         episode.build_episode_grn(time_slice=slice(5, 10))
         episode.filter_edges(n_processes=2, chunk_size=100, pval_threshold=0.05)
         tf_expr = episode.compute_tf_expression()
         assert tf_expr.loc["TFB"].values == pytest.approx(
             episode.lcpm_dcurve.loc["TFB"].values[5:10]
-        )
-
-    def test_currently_reuses_the_first_time_points_for_every_episode(self, episode):
-        episode.compute_expression_curves()
-        episode.build_episode_grn(time_slice=slice(5, 10))
-        episode.filter_edges(n_processes=2, chunk_size=100, pval_threshold=0.05)
-        tf_expr = episode.compute_tf_expression()
-        assert tf_expr.loc["TFB"].values == pytest.approx(
-            episode.lcpm_dcurve.loc["TFB"].values[0:5]
         )
 
 
@@ -388,18 +370,9 @@ class TestCalculateForces:
         assert prepared.force_curves.shape == prepared.filtered_edges_p001.shape[0:1] + (5,)
         assert list(avg.columns) == ["avg_force"]
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="ISSUES.md #1 (CONFIRMED, high) -- calculate_forces inherits the "
-               "calculate_force_curves_chunk misalignment: the TF expression is repeated "
-               "in value_counts() order (descending target count) onto rows that are "
-               "grouped in network order, so edges get another TF's expression whenever "
-               "the two orders differ.  NB the mock fixture happens to make the two "
-               "orders agree (TFA has more targets AND a lower nids[0] index), which is "
-               "why the end-to-end workflow tests above still pass -- that coincidence "
-               "will not hold on a real network with hundreds of TFs.",
-    )
     def test_expression_is_matched_to_the_right_regulator(self, episode):
+        # ISSUES.md #1, FIXED: calculate_force_curves_chunk aligns TF expression to the
+        # beta rows by NAME, so an unequal target count no longer skews the pairing.
         # TFA has one edge, TFB has two: the row order (TFA first) and the
         # value_counts order (TFB first) disagree.
         index = pd.MultiIndex.from_tuples(

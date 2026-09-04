@@ -68,6 +68,10 @@ class EpisodeDynamics:
         # State variables
         self.lcpm_dcurve = None
         self.dtime = None
+        # Pseudotime points the current episode spans; set by build_episode_grn() and
+        # read back by compute_tf_expression() so regulator expression is taken from
+        # the episode's own window rather than always from the start of the branch.
+        self.time_slice = slice(0, num_points)
         self.episode_beta_dcurve = None
         self.filtered_edges = None
         self.filtered_edges_p001 = None
@@ -106,6 +110,10 @@ class EpisodeDynamics:
         dnetbin = stat1_netbin.compute(pts)
         dnet_episode = dnet[:, :, time_slice]
         dnetbin_episode = dnetbin[:, :, time_slice]
+
+        # Remember which pseudotime points this episode spans, so that
+        # compute_tf_expression() can take regulator expression from the SAME window.
+        self.time_slice = time_slice
 
         # Map indices to gene names
         ndict = self.dictys_dynamic_object.ndict
@@ -170,15 +178,26 @@ class EpisodeDynamics:
         """
         compute tf expression for the episode (matching time window).
         """
+        if self.lcpm_dcurve is None or self.filtered_edges_p001 is None:
+            raise ValueError(
+                "Run compute_expression_curves() and filter_edges() before "
+                "compute_tf_expression()."
+            )
         tf_names = self.filtered_edges_p001.index.get_level_values(0).unique()
-        tf_lcpm_values = self.lcpm_dcurve.loc[tf_names]
-        n_time_cols = len(
-            [col for col in self.filtered_edges_p001.columns if col.startswith("time_")]
-        )
-        tf_lcpm_episode = tf_lcpm_values.iloc[:, 0:n_time_cols]
-        tf_lcpm_episode.columns = [
+        time_cols = [
             col for col in self.filtered_edges_p001.columns if col.startswith("time_")
-        ][:n_time_cols]
+        ]
+        # Take the episode's OWN pseudotime points. The previous implementation sliced
+        # `iloc[:, 0:n_time_cols]` -- always the FIRST n points of the branch -- and then
+        # relabelled them, so every episode after the first paired its beta curves with
+        # episode-1 regulator expression.
+        tf_lcpm_episode = self.lcpm_dcurve.loc[tf_names].iloc[:, self.time_slice].copy()
+        if tf_lcpm_episode.shape[1] != len(time_cols):
+            raise ValueError(
+                f"Episode has {len(time_cols)} time point(s) but the expression slice "
+                f"{self.time_slice} selects {tf_lcpm_episode.shape[1]}."
+            )
+        tf_lcpm_episode.columns = time_cols
         self.tf_lcpm_episode = tf_lcpm_episode
         return tf_lcpm_episode
 

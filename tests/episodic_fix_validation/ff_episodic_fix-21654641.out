@@ -1,0 +1,304 @@
+host        : cn033.delta.ncsa.illinois.edu
+job id      : 21654641
+cpus        : 4
+mem         : 65536 MB
+started     : 2026-08-31T09:44:56-05:00
+python      : /projects/bgdb/asachan/.conda/envs/dictys/bin/python
+firefate     : /projects/bhdw/asachan/methods/firefate_codebases/FIREFate/src/firefate/__init__.py
+dictys       : /projects/bgdb/asachan/.conda/envs/dictys/lib/python3.9/site-packages/dictys/__init__.py
+
+[config]   feature_list_Z11_GC_PB.txt: 34 genes (+34 new)
+[config]   feature_list_Z3_GC_PB.txt: 29 genes (+23 new)
+[config] 57 LF genes (union, HLA- dropped)
+[config] n_processes=4
+
+==============================================================================
+[pb] trajectory_range=(1, 2)
+==============================================================================
+[slim_loader] /work/nvme/bhdw/asachan/data_files/firefate/bcell/outs/dynamic.h5
+[slim_loader]   loaded  prop/c/coord                 0.00 GB
+[slim_loader]   loaded  prop/es/w                   10.18 GB
+[slim_loader]   loaded  prop/ns/cpm                  0.02 GB
+[slim_loader]   loaded  prop/sc/w                    0.04 GB
+[slim_loader]   loaded  prop/ss/traj-neighbor        0.00 GB
+[slim_loader]   skipped prop/es/mask                 1.27 GB
+[slim_loader]   skipped prop/es/mask_in              1.27 GB
+[slim_loader]   skipped prop/es/mask_n               1.27 GB
+[slim_loader]   skipped prop/es/w_in                10.18 GB
+[slim_loader]   skipped prop/es/w_n                 10.18 GB
+[slim_loader]   skipped prop/nc/readcount            0.68 GB
+[slim_loader]   total loaded 10.25 GB, skipped 24.86 GB
+[pb] network loaded in 36s
+[pb] expression curves (11907, 20) in 1s
+
+--- [pb_ep1] time_slice=slice(0, 5, None) ---
+[pb_ep1] episode GRN (980023, 5) in 57s
+Processing 980,023 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 123 chunks of indices
+Processing completed in 298.81 seconds
+Sorting results...
+Creating result DataFrame...
+[pb_ep1] filtered edges (500816, 6) in 302s
+Processing 500,816 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (500816, 5)
+TF expression shape: (320, 5)
+Created 16 chunks
+Chunk sizes: [31301, 31301, 31301, 31301, 31301]...
+Processing completed in 1.47 seconds
+Combining results...
+Final shape: (500816, 5)
+[pb_ep1] TFs fixed=50 legacy=57  sig-Jaccard=0.250  ES-spearman=0.846  top20-overlap=11/20
+
+--- [pb_ep2] time_slice=slice(5, 10, None) ---
+[pb_ep2] episode GRN (980023, 5) in 62s
+Processing 980,023 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 123 chunks of indices
+Processing completed in 298.22 seconds
+Sorting results...
+Creating result DataFrame...
+[pb_ep2] filtered edges (458924, 6) in 302s
+Processing 458,924 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (458924, 5)
+TF expression shape: (323, 5)
+Created 15 chunks
+Chunk sizes: [30595, 30595, 30595, 30595, 30595]...
+Processing completed in 2.02 seconds
+Combining results...
+Final shape: (458924, 5)
+[pb_ep2] TFs fixed=43 legacy=52  sig-Jaccard=0.333  ES-spearman=0.893  top20-overlap=8/20
+
+--- [pb_ep3] time_slice=slice(10, 15, None) ---
+[pb_ep3] episode GRN (980023, 5) in 60s
+Processing 980,023 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 123 chunks of indices
+Processing completed in 295.30 seconds
+Sorting results...
+Creating result DataFrame...
+[pb_ep3] filtered edges (284629, 6) in 299s
+Processing 284,629 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (284629, 5)
+TF expression shape: (322, 5)
+Created 9 chunks
+Chunk sizes: [31626, 31626, 31626, 31626, 31625]...
+Processing completed in 0.89 seconds
+Combining results...
+Final shape: (284629, 5)
+[pb_ep3] TFs fixed=32 legacy=33  sig-Jaccard=0.273  ES-spearman=0.901  top20-overlap=11/20
+
+--- [pb_ep4] time_slice=slice(15, 20, None) ---
+[pb_ep4] episode GRN (980023, 5) in 61s
+Processing 980,023 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 123 chunks of indices
+Processing completed in 296.36 seconds
+Sorting results...
+Creating result DataFrame...
+[pb_ep4] filtered edges (230471, 6) in 300s
+Processing 230,471 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (230471, 5)
+TF expression shape: (309, 5)
+Created 7 chunks
+Chunk sizes: [32925, 32925, 32925, 32924, 32924]...
+Processing completed in 1.27 seconds
+Combining results...
+Final shape: (230471, 5)
+[pb_ep4] TFs fixed=20 legacy=25  sig-Jaccard=0.000  ES-spearman=0.881  top20-overlap=9/20
+
+==============================================================================
+[gc] trajectory_range=(1, 3)
+==============================================================================
+[slim_loader] /work/nvme/bhdw/asachan/data_files/firefate/bcell/outs/dynamic.h5
+[slim_loader]   loaded  prop/c/coord                 0.00 GB
+[slim_loader]   loaded  prop/es/w                   10.18 GB
+[slim_loader]   loaded  prop/ns/cpm                  0.02 GB
+[slim_loader]   loaded  prop/sc/w                    0.04 GB
+[slim_loader]   loaded  prop/ss/traj-neighbor        0.00 GB
+[slim_loader]   skipped prop/es/mask                 1.27 GB
+[slim_loader]   skipped prop/es/mask_in              1.27 GB
+[slim_loader]   skipped prop/es/mask_n               1.27 GB
+[slim_loader]   skipped prop/es/w_in                10.18 GB
+[slim_loader]   skipped prop/es/w_n                 10.18 GB
+[slim_loader]   skipped prop/nc/readcount            0.68 GB
+[slim_loader]   total loaded 10.25 GB, skipped 24.86 GB
+[gc] network loaded in 37s
+[gc] expression curves (11907, 20) in 1s
+
+--- [gc_ep1] time_slice=slice(0, 5, None) ---
+[gc_ep1] episode GRN (985891, 5) in 56s
+Processing 985,891 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 124 chunks of indices
+Processing completed in 308.06 seconds
+Sorting results...
+Creating result DataFrame...
+[gc_ep1] filtered edges (648254, 6) in 311s
+Processing 648,254 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (648254, 5)
+TF expression shape: (318, 5)
+Created 21 chunks
+Chunk sizes: [30870, 30870, 30870, 30870, 30870]...
+Processing completed in 2.85 seconds
+Combining results...
+Final shape: (648254, 5)
+[gc_ep1] TFs fixed=59 legacy=69  sig-Jaccard=0.200  ES-spearman=0.772  top20-overlap=7/20
+
+--- [gc_ep2] time_slice=slice(5, 10, None) ---
+[gc_ep2] episode GRN (985891, 5) in 62s
+Processing 985,891 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 124 chunks of indices
+Processing completed in 300.13 seconds
+Sorting results...
+Creating result DataFrame...
+[gc_ep2] filtered edges (586532, 6) in 304s
+Processing 586,532 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (586532, 5)
+TF expression shape: (318, 5)
+Created 19 chunks
+Chunk sizes: [30871, 30871, 30870, 30870, 30870]...
+Processing completed in 1.88 seconds
+Combining results...
+Final shape: (586532, 5)
+[gc_ep2] TFs fixed=49 legacy=52  sig-Jaccard=0.250  ES-spearman=0.742  top20-overlap=6/20
+
+--- [gc_ep3] time_slice=slice(10, 15, None) ---
+[gc_ep3] episode GRN (985891, 5) in 60s
+Processing 985,891 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 124 chunks of indices
+Processing completed in 307.79 seconds
+Sorting results...
+Creating result DataFrame...
+[gc_ep3] filtered edges (228735, 6) in 311s
+Processing 228,735 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (228735, 5)
+TF expression shape: (318, 5)
+Created 7 chunks
+Chunk sizes: [32677, 32677, 32677, 32676, 32676]...
+Processing completed in 0.74 seconds
+Combining results...
+Final shape: (228735, 5)
+[gc_ep3] TFs fixed=25 legacy=21  sig-Jaccard=0.222  ES-spearman=0.905  top20-overlap=13/20
+
+--- [gc_ep4] time_slice=slice(15, 20, None) ---
+[gc_ep4] episode GRN (985891, 5) in 61s
+Processing 985,891 rows using 4 processes...
+Chunk size: 8,000 rows
+Direction invariance check: Enabled
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Creating index chunks...
+Created 124 chunks of indices
+Processing completed in 301.55 seconds
+Sorting results...
+Creating result DataFrame...
+[gc_ep4] filtered edges (578961, 6) in 305s
+Processing 578,961 edges using 4 processes...
+Chunk size: 30,000 rows
+Time columns: ['time_0', 'time_1', 'time_2', 'time_3', 'time_4']
+Beta curves shape: (578961, 5)
+TF expression shape: (321, 5)
+Created 19 chunks
+Chunk sizes: [30472, 30472, 30472, 30472, 30472]...
+Processing completed in 2.73 seconds
+Combining results...
+Final shape: (578961, 5)
+[gc_ep4] TFs fixed=50 legacy=54  sig-Jaccard=0.400  ES-spearman=0.905  top20-overlap=10/20
+# Episodic enrichment: pre-fix vs post-fix
+
+Both variants were computed from **identical** smoothed networks and identical
+filtered edge sets; they differ only in ISSUES #1 (force/expression alignment)
+and #3 (episode time-slice for regulator expression).
+
+- `dynamic.h5`: `/work/nvme/bhdw/asachan/data_files/firefate/bcell/outs/dynamic.h5`
+- LF gene set: union of `/work/nvme/bhdw/asachan/data_files/firefate/bcell/latent_factors/feature_list_Z11_GC_PB.txt,/work/nvme/bhdw/asachan/data_files/firefate/bcell/latent_factors/feature_list_Z3_GC_PB.txt` (57 genes after dropping `HLA-`)
+- num_points=20, points_per_episode=5, dist=0.001, sparsity=0.01
+- percentile=98.0, pval_threshold=0.001, significance alpha=0.05
+
+## Per-episode agreement
+
+| branch | ep | edges filtered | TFs fixed | TFs legacy | sig∩ | only fixed | only legacy | Jaccard | ES ρ | top20 ∩ | expr identical |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| PB | 1 | 500,816 | 50 | 57 | 2 | 0 | 6 | 0.250 | 0.846 | 11/20 | True |
+| PB | 2 | 458,924 | 43 | 52 | 6 | 2 | 10 | 0.333 | 0.893 | 8/20 | False |
+| PB | 3 | 284,629 | 32 | 33 | 3 | 3 | 5 | 0.273 | 0.901 | 11/20 | False |
+| PB | 4 | 230,471 | 20 | 25 | 0 | 4 | 7 | 0.000 | 0.881 | 9/20 | False |
+| GC | 1 | 648,254 | 59 | 69 | 3 | 5 | 7 | 0.200 | 0.772 | 7/20 | True |
+| GC | 2 | 586,532 | 49 | 52 | 2 | 4 | 2 | 0.250 | 0.742 | 6/20 | False |
+| GC | 3 | 228,735 | 25 | 21 | 2 | 2 | 5 | 0.222 | 0.905 | 13/20 | False |
+| GC | 4 | 578,961 | 50 | 54 | 6 | 2 | 7 | 0.400 | 0.905 | 10/20 | False |
+
+## Verdict
+
+- episodes compared: **8**
+- episodes where the enriched-TF set changed: **8**
+- mean significant-TF Jaccard: **0.241**
+- mean ES Spearman (TFs present in both): **0.856**
+- mean top-20 overlap: **9.4/20**
+- episodes with no significant TF in either variant: **0**
+
+TFs gained or lost at the significance threshold, per episode:
+
+- **PB ep1**
+  - only before fix: `ATF3;FOSL1;IKZF3;MAX;MYC;POU2F2`
+- **PB ep2**
+  - only after fix: `REL;RELA`
+  - only before fix: `CREBL2;HES1;IKZF2;MYC;NFAT5;PBX2;POGK;POU2F2;TCF12;USF2`
+- **PB ep3**
+  - only after fix: `IKZF3;MEF2C;REL`
+  - only before fix: `CREBL2;MLX;RUNX1;RUNX3;TFEB`
+- **PB ep4**
+  - only after fix: `CREB3L2;MEF2A;RUNX3;STAT3`
+  - only before fix: `ARNTL;HNF1B;MTF2;MYNN;PLAG1;RELB;TEAD2`
+- **GC ep1**
+  - only after fix: `IKZF3;MEF2C;MYC;NFATC2;RELA`
+  - only before fix: `ATF3;BPTF;CENPB;FOSL1;IKZF1;IRF2;RUNX3`
+- **GC ep2**
+  - only after fix: `IKZF3;NR3C1;RELA;RUNX3`
+  - only before fix: `BHLHE40;CENPB`
+- **GC ep3**
+  - only after fix: `CDC5L;MAX`
+  - only before fix: `MYC;PBX2;TCF12;TCF4;USF2`
+- **GC ep4**
+  - only after fix: `CREB3L2;NFATC2`
+  - only before fix: `CEBPB;POGK;POU2F1;POU3F1;SOX4;TCF4;ZFP14`
+
+finished    : 2026-08-31T10:36:08-05:00
+results in  : /projects/bhdw/asachan/methods/firefate_codebases/FIREFate/tests/episodic_fix_validation/results

@@ -430,19 +430,8 @@ class TestForceCurvesChunk:
         with pytest.raises(KeyError):
             calculate_force_curves_chunk(beta, expr)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="ISSUES.md #1 (CONFIRMED, high) -- calculate_force_curves_chunk reindexes "
-               "tf_expression to the value_counts() order (descending target count) and "
-               "then repeats it positionally onto beta_chunk's rows.  Unless the beta "
-               "rows happen to be grouped in that same order, every edge is multiplied "
-               "by another TF's expression.  Rows coming out of build_episode_grn are "
-               "grouped in network order, and filter_edges then drops rows so the target "
-               "counts become unequal -- so the episodic force curves are mis-assigned. "
-               "get_tf_indices is NOT in this code path (it is called only from "
-               "get_beta_curves), so it does not account for the ordering here.",
-    )
     def test_expression_is_matched_by_tf_name_not_by_row_order(self):
+        # ISSUES.md #1, FIXED: expression is reindexed onto the row-level TF labels.
         index = pd.MultiIndex.from_tuples(
             [("TFA", "G1"), ("TFB", "G2"), ("TFB", "G3")], names=["TF", "Target"]
         )
@@ -451,19 +440,6 @@ class TestForceCurvesChunk:
         out = calculate_force_curves_chunk(beta, expr)
         expected = expected_force(beta.values, np.array([[10.0], [1000.0], [1000.0]]))
         assert out.values == pytest.approx(expected)
-
-    def test_currently_swaps_expression_between_tfs(self):
-        # The concrete symptom of the issue above, pinned so the behaviour
-        # change is caught either way.
-        index = pd.MultiIndex.from_tuples(
-            [("TFA", "G1"), ("TFB", "G2"), ("TFB", "G3")], names=["TF", "Target"]
-        )
-        beta = pd.DataFrame([[1.0], [1.0], [1.0]], index=index, columns=["time_0"])
-        expr = pd.DataFrame([[10.0], [1000.0]], index=["TFA", "TFB"], columns=["time_0"])
-        out = calculate_force_curves_chunk(beta, expr)
-        assert out.loc[("TFA", "G1"), "time_0"] == pytest.approx(
-            expected_force(1.0, 1000.0)          # TFB's expression!
-        )
 
 
 @pytest.mark.slow

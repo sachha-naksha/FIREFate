@@ -265,21 +265,25 @@ def calculate_force_curves_chunk(
     Returns:
         DataFrame with force curves for the chunk
     """
-    # Get unique TFs in this chunk
-    tfs_in_chunk = beta_chunk.index.get_level_values(0).unique()
-
-    # Count number of targets per TF in this chunk
-    targets_per_tf = beta_chunk.index.get_level_values(0).value_counts()
-
-    # Get TF expression data for TFs in this chunk, in the same order as targets_per_tf
-    tf_expr_subset = tf_expression.loc[targets_per_tf.index]
-
-    # Create expanded TF expression DataFrame to match beta_chunk structure
-    expanded_tf_expr = pd.DataFrame(
-        np.repeat(tf_expr_subset.values, targets_per_tf.values, axis=0),
-        index=beta_chunk.index,
-        columns=beta_chunk.columns,
-    )
+    # Align TF expression to the beta rows BY NAME.
+    #
+    # The previous implementation took `value_counts()` (which orders TFs by
+    # DESCENDING TARGET COUNT) and attached the repeated expression blocks to the
+    # frame in ROW order. Those two orders agree only when the rows happen to be
+    # grouped by descending target count; rows out of `build_episode_grn` are grouped
+    # in dictys `nids[0]` (alphabetical) order and `filter_edges` makes the counts
+    # unequal, so in practice most edges were scaled by another TF's expression.
+    # Reindexing on the row-level TF labels makes the pairing structural instead of
+    # positional.
+    row_tfs = beta_chunk.index.get_level_values(0)
+    missing = row_tfs.unique().difference(tf_expression.index)
+    if len(missing) > 0:
+        raise KeyError(
+            f"TF expression missing for {len(missing)} regulator(s) in this chunk: "
+            f"{sorted(missing)[:10]}{' ...' if len(missing) > 10 else ''}"
+        )
+    expanded_tf_expr = tf_expression.reindex(row_tfs)
+    expanded_tf_expr.index = beta_chunk.index
 
     # Convert to numpy arrays for calculations
     beta_array = beta_chunk.to_numpy()
