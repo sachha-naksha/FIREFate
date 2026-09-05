@@ -1,4 +1,3 @@
-# FIREFate (Functional and Interpretable Regulatory Encoding of cellular Fate)
 
 This repository provides an open-source toolkit, which delivers multi-scale insights at the cell-population, gene-regulatory and epigenomic levels to predict fate-bias during cell state transitions, and infer regulatory components governing cell fate decisions. The framework is built for single-cell (sc-snRNA/scATAC-seq) datasets for both matched or un-matched multi-omic sequenced populations.
 
