@@ -29,7 +29,7 @@ Nothing in the library was modified.
 
 **Runnable proof:** `tests/issues_1_and_2_force_misalignment.ipynb` (executed, outputs saved).
 
-**Status: CONFIRMED, and reached by production code.**  A later audit of the
+**Status: FIXED in a6c9aa0 (see tests/episodic_fix_validation).**  Was CONFIRMED, and reached by production code.  A later audit of the
 repo's own call sites confirmed the notebook is not exercising an invented
 order:
 
@@ -199,7 +199,7 @@ to do the right thing as written.  Both `run_episodic_construction` and
 Tests: `test_episodes.py::TestComputeTfExpression::test_expression_is_taken_from_the_episode_s_own_time_window`
 (xfail), `::test_currently_reuses_the_first_time_points_for_every_episode`.
 
-**Status: CONFIRMED.**
+**Status: FIXED in a6c9aa0 (see tests/episodic_fix_validation).**  Was CONFIRMED.
 
 Suggested fix -- record the slice when the episode is built and use it, since
 the runners already know it:
