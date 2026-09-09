@@ -238,9 +238,18 @@ class SmoothedCurvesGRN:
     ) -> pd.DataFrame:
         """
         calculates regulatory force curves using log transformation.
-        
-        force is calculated as beta * tf_expression
-        
+
+        force is a sign-preserving log-space compression of beta * tf_expression,
+        not the raw product::
+
+            force = sign(beta) * exp(log10(|beta| + eps) + log10(tf_expr + eps))
+                  = sign(beta) * ((|beta| + eps) * (tf_expr + eps)) ** (1 / ln 10)
+
+        i.e. the product raised to the power 1/ln(10) ~= 0.434 (exp of a base-10
+        log). This is intended (ISSUES.md #7): it is monotone in the product, so
+        edge rankings at a given time point are unchanged, but the magnitudes are
+        compressed and time-averages of them are not averages of beta * tf_expr.
+
         args:
             beta_curves: DataFrame with regulatory coefficients (multi-indexed by tf and target)
             tf_expression: Series with tf expression values

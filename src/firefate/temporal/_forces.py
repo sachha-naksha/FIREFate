@@ -257,6 +257,17 @@ def calculate_force_curves_chunk(
     """
     Calculate force curves for a chunk of beta values using log transformation
 
+    The force is a sign-preserving log-space compression of beta * tf_expression,
+    not the raw product::
+
+        force = sign(beta) * exp(log10(|beta| + eps) + log10(tf_expr + eps))
+              = sign(beta) * ((|beta| + eps) * (tf_expr + eps)) ** (1 / ln 10)
+
+    i.e. the product raised to the power 1/ln(10) ~= 0.434 (exp of a base-10 log).
+    This is intended (ISSUES.md #7): it is monotone in the product, so edge rankings
+    at a given time point are unchanged, but magnitudes are compressed and the
+    time-averaged ``avg_force`` is not the average of beta * tf_expr.
+
     Parameters:
         beta_chunk: DataFrame chunk with multi-index (TF, Target) and time columns
         tf_expression: DataFrame with TF expression values (TF as index, time as columns)
@@ -297,6 +308,7 @@ def calculate_force_curves_chunk(
     signs = np.sign(beta_array)
 
     # Calculate forces: force = sign(beta) * exp(log10(|beta|) + log10(tf_expr))
+    #                  = sign(beta) * (|beta| * tf_expr) ** (1 / ln 10)   (see docstring)
     force_array = signs * np.exp(log_beta + log_tf)
 
     # Convert back to DataFrame
