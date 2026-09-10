@@ -257,17 +257,27 @@ class SmoothedCurvesGRN:
         returns:
             dataframe with calculated force curves
         """
-        # Count number of targets per tf from beta_curves multi-index
-        targets_per_tf = beta_curves.index.get_level_values(0).value_counts()
-        
-        # Create a DataFrame with repeated tf expression values for each target
-        expanded_tf_expr = pd.DataFrame(
-            np.repeat(
-                tf_expression.values, targets_per_tf.values, axis=0
-            ),
-            index=beta_curves.index,
-            columns=beta_curves.columns,
-        )
+        # Align TF expression to the beta rows BY NAME (ISSUES.md #2).
+        #
+        # The previous implementation repeated the expression rows by
+        # `value_counts()` (descending target count) onto the frame in row order,
+        # so the pairing was positional and only correct when the caller had
+        # already ordered the expression rows like the beta frame's TF groups.
+        # Reindexing on the row-level TF labels makes it structural.
+        if not isinstance(tf_expression, pd.DataFrame):
+            raise ValueError(
+                "tf_expression must be a DataFrame indexed by TF with one column "
+                "per time point (same columns as beta_curves)."
+            )
+        row_tfs = beta_curves.index.get_level_values(0)
+        missing = row_tfs.unique().difference(tf_expression.index)
+        if len(missing) > 0:
+            raise KeyError(
+                f"TF expression missing for {len(missing)} regulator(s): "
+                f"{sorted(missing)[:10]}{' ...' if len(missing) > 10 else ''}"
+            )
+        expanded_tf_expr = tf_expression.reindex(row_tfs)
+        expanded_tf_expr.index = beta_curves.index
         
         # convert to numpy arrays for calculations
         beta_array = beta_curves.to_numpy()

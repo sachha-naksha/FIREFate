@@ -549,18 +549,10 @@ class TestStaticForceCurves:
         with pytest.raises(ValueError):
             SmoothedCurvesGRN.calculate_force_curves(beta, pd.Series([3.0], index=["TFA"]))
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="ISSUES.md #2 (REVISED, medium) -- calculate_force_curves pairs beta rows "
-               "with expression rows positionally, never by TF name. This input (a beta "
-               "frame with UNEQUAL target counts per TF, e.g. one filtered by hand) is "
-               "NOT what get_beta_curves produces, so it is not the normal case: a "
-               "get_beta_curves cross product has equal counts, value_counts() ties, and "
-               "the positional pairing happens to line up. See "
-               "TestBetaCurvesFeedingForceCurves in test_smoothed_curves_grn.py for the "
-               "failure mode that IS reachable through the public API.",
-    )
     def test_aligns_expression_by_tf_name_with_unequal_target_counts(self):
+        # ISSUES.md #2 -- FIXED: calculate_force_curves now reindexes the expression
+        # frame onto the row-level TF labels, so a beta frame with UNEQUAL target
+        # counts per TF (e.g. one filtered by hand) is paired by name, not position.
         index = pd.MultiIndex.from_tuples(
             [("TFA", "G1"), ("TFB", "G2"), ("TFB", "G3")], names=["TF", "Target"]
         )
@@ -574,6 +566,17 @@ class TestStaticForceCurves:
             beta.values, np.array([[10.0], [1000.0], [1000.0]])
         )
         assert out.values == pytest.approx(expected)
+
+    def test_missing_regulator_expression_raises(self):
+        # ISSUES.md #2 -- a beta row whose TF has no expression row is an error,
+        # not a silently mis-scaled force.
+        index = pd.MultiIndex.from_tuples(
+            [("TFA", "G1"), ("TFB", "G2")], names=["TF", "Target"]
+        )
+        beta = pd.DataFrame([[1.0], [1.0]], index=index, columns=["time_0"])
+        expr = pd.DataFrame([[10.0]], index=["TFA"], columns=["time_0"])
+        with pytest.raises(KeyError, match="TFB"):
+            SmoothedCurvesGRN.calculate_force_curves(beta, expr)
 
     def test_force_is_a_log_space_compression_of_the_product(self):
         # ISSUES.md #7 -- DOCS ONLY.  The log-space transform is intended; the

@@ -363,15 +363,14 @@ class TestBetaCurves:
 # --------------------------------------------------------------------------- #
 
 class TestBetaCurvesFeedingForceCurves:
-    """The reachable half of ISSUES.md #2 (REVISED).
+    """The reachable half of ISSUES.md #2 -- FIXED.
 
-    ``calculate_force_curves`` pairs beta rows with expression rows purely by
-    position.  A beta frame from ``get_beta_curves`` is a full cross product, so
-    every TF has the same number of targets, ``value_counts()`` ties, and the
-    positional pairing lines up -- *provided* the caller supplies the expression
-    rows in the same order as the beta frame's TF groups.  That order comes from
-    ``list(set(...))`` inside ``get_beta_curves`` (see #13), so it is not the
-    caller's link order and not stable between runs.
+    ``calculate_force_curves`` used to pair beta rows with expression rows purely
+    by position, so a ``get_beta_curves`` frame was scored correctly only when the
+    caller supplied the expression rows in the beta frame's TF-group order (which
+    comes from ``list(set(...))``, see #13, so is not knowable in advance).  It now
+    reindexes the expression frame by TF name, so any row order gives the same
+    forces.
     """
 
     @staticmethod
@@ -401,18 +400,16 @@ class TestBetaCurvesFeedingForceCurves:
                 self._expected(beta, expr, tf, target)
             ), f"{tf}->{target}"
 
-    def test_silently_wrong_when_expression_is_in_any_other_order(self, beta_and_expression):
-        # ISSUES.md #2: no error, no warning -- just wrong numbers for every
-        # non-zero edge.  Zero-beta rows survive because sign(0) == 0.
+    def test_correct_when_expression_is_in_any_other_order(self, beta_and_expression):
+        # ISSUES.md #2 (fixed): before the name-based reindex, reversing the
+        # expression rows silently mis-scaled every non-zero edge.
         beta, expr = beta_and_expression
         groups = list(dict.fromkeys(beta.index.get_level_values(0)))
         out = SmoothedCurvesGRN.calculate_force_curves(beta, expr.loc[groups[::-1]])
-        wrong = [
-            (tf, target) for tf, target in beta.index
-            if not np.allclose(out.loc[(tf, target)].values,
-                               self._expected(beta, expr, tf, target))
-        ]
-        assert set(wrong) == {("TFA", "G1"), ("TFB", "G4")}   # the two real edges
+        for tf, target in beta.index:
+            assert out.loc[(tf, target)].values == pytest.approx(
+                self._expected(beta, expr, tf, target)
+            ), f"{tf}->{target}"
 
     def test_the_safe_idiom_derives_the_order_from_the_beta_frame(self, beta_and_expression):
         # what a caller should write, given the order is not knowable in advance

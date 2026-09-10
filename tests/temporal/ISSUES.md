@@ -96,7 +96,14 @@ Tests: `TestForceCurvesChunk::test_expression_is_matched_by_tf_name_not_by_row_o
 
 ### 2. Same defect, unguarded, in `SmoothedCurvesGRN.calculate_force_curves`
 
-The static method in `temporal/_curves.py` does the same `np.repeat` but never
+**Status: FIXED (2026-09-09).**  `calculate_force_curves` now reindexes
+`tf_expression` onto the row-level TF labels (same structural pairing as the
+`calculate_force_curves_chunk` fix for #1) and raises `KeyError` for a regulator
+with no expression row.  The xfail in `test_curve_math.py` is a plain assertion
+and `TestBetaCurvesFeedingForceCurves` asserts any expression row order is
+correct.  The history below is kept as written.
+
+The static method in `temporal/_curves.py` did the same `np.repeat` but never
 even reindexes `tf_expression`, so it uses the caller's row order for the
 *values* and the count-sorted order for the *repeat counts*.  It is correct only
 if the expression frame is already sorted by descending target count and the beta
