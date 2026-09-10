@@ -9,37 +9,42 @@ FIREFate
 
 |
 
-**FIREFate** (Functional and Interpretable Regulatory Encoding of cellular Fate) uses
-interpretable machine learning to focus dense mechanistic gene regulatory networks
-onto the components that actually govern cell fate decisions. It works on single-cell
-RNA and ATAC data, matched or unmatched.
+**FIREFate** (Functional and Interpretable Regulatory Encoding of cellular Fate) combines
+mechanistic gene regulatory networks (GRNs) with interpretable machine learning to focus
+dense state-specific and dynamic GRNs onto the regulatory components that govern cell
+fate decisions. It works on single-cell RNA and ATAC data (sc/snRNA-seq, scATAC-seq),
+matched or unmatched.
 
-The framework is three modules in one package, each answering a different question
-about regulation:
+The framework is three modules in one package, one per product in the figure above:
 
 .. grid:: 3
     :gutter: 2
-
-    .. grid-item-card:: Temporal
-        :link: user/temporal
-        :link-type: doc
-
-        How does TF regulation change *along* a trajectory? Transition-window and
-        episodic GRNs, force waves, regulatory phases.
 
     .. grid-item-card:: State-specific
         :link: user/state_specific
         :link-type: doc
 
-        What separates two *fixed* states, and what happens if we perturb it?
-        State and cross-state GRNs, enrichment, in-silico knockout.
+        **Prioritized regulatory subnetworks.** Interpretable ML discovers sparse
+        cellular programs (CPs) that separate contrasting cell states, and embeds them
+        in state-specific and cross-state GRNs to surface the TFs whose regulons are
+        enriched for each program, including in-silico perturbation of the enriched TFs.
+
+    .. grid-item-card:: Temporal
+        :link: user/temporal
+        :link-type: doc
+
+        **Phase-resolved dynamic regulation.** Transition-window and episodic GRNs
+        along pseudotime assign TF–target edges to regulatory phases inferred from
+        pseudotemporal clustering, ordering waves of TF regulation and retaining the
+        forces that stay invariant within each episode.
 
     .. grid-item-card:: Cross-prediction
         :link: user/cross_prediction
         :link-type: doc
 
-        Do programs learned on one dataset *transfer* to stratify another?
-        Fate-bias stratification of uncommitted populations.
+        **Fate predisposition by transfer learning.** CPs learned from fate-switching
+        perturbations (e.g. TF knockouts) versus controls stratify uncommitted
+        populations in unperturbed data by their predicted fate bias.
 
 Getting started
 ---------------
