@@ -789,6 +789,20 @@ refactor, in stages, so the shared parts are shared by construction:
   (termination / depletion) that the softmax peaks of prioritised links are
   binned into -- so a linear trajectory with `N` switches has `N + 1` phases.
   Numbers unchanged; pinned by `test_force_source.py`.
+* Stage 5 (2026-09-10, done): trajectory topology is declared once.
+  `TrajectorySegments(net, {name: trajectory_range}, num_points=, dist=,
+  sparsity=, output_dir=)` holds one `TemporalManager` (hence one
+  `TFForceSource`) per named segment with shared smoothing settings, and derives
+  everything that spans segments: `waves()` (built once per segment),
+  `selector()`, `validate()` (mode `combined` for several segments, `lineage`
+  for one), `compare_sets()` / `compare_sets_by_phase()`.  Phases stay
+  per-segment and orthogonal: `state_frequency(name, cell_labels)` fills in the
+  segment's range and `phases(name, switch_pseudotimes)` bins link peaks on that
+  segment's waves.  `traj[name]` is the segment's manager for episodes.  A
+  linear trajectory is `{"linear": (start, end)}`.  Replaces the notebook
+  pattern of typing each branch's range into `TFForceWaves`, `StateFrequency`
+  and the `{'PB': waves_pb, 'GC': waves_gc}` dicts by hand.  Numbers unchanged;
+  pinned by `test_segments.py`.
 
 ### 24. `TemporalManager.build_transition_window` handed the force kernel a Series
 

@@ -82,6 +82,7 @@ from firefate.temporal._waves import (
 )
 from firefate.temporal.manager import (
     TemporalManager,
+    TrajectorySegments,
     run_episodic_construction,
     run_episodic_enrichment,
 )
@@ -99,6 +100,7 @@ __all__ = [
     "TFForceValidation",
     "TFForceWaves",
     "TemporalManager",
+    "TrajectorySegments",
     "abs_max_force",
     "aggregate_max_points",
     "calculate_force_curves",

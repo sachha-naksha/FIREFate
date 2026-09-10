@@ -11,6 +11,13 @@ Examples
 >>> grn = mgr.build_episode(1, slice(0, 5))
 >>> enr = mgr.enrich_episode(1, slice(0, 5), lf_genes=lf_blimp1)
 >>> waves = mgr.waves(links=enr_links)
+
+A dataset's trajectory topology is declared once with :class:`TrajectorySegments`
+(one manager per named segment, a linear trajectory being a single segment):
+
+>>> traj = TrajectorySegments(dyn_obj, {"PB": (0, 2), "GC": (0, 3)}, num_points=100)
+>>> traj["PB"].build_episode(1, slice(0, 5))
+>>> traj.compare_sets({"State-specific": ss_links, "Episodic": ep_links})
 """
 from __future__ import annotations
 
@@ -26,6 +33,7 @@ from firefate.temporal._curves import SmoothedCurvesGRN
 from firefate.temporal._episodes import EpisodeDynamics
 from firefate.temporal._phases import ForceWavePhases
 from firefate.temporal._source import TFForceSource
+from firefate.temporal._states import StateFrequency
 from firefate.temporal._validation import TFForceValidation
 from firefate.temporal._waves import TFForceWaves
 
@@ -345,6 +353,172 @@ class TemporalManager(BaseManager):
     ) -> TFForceValidation:
         """Compare enriched links against a size-matched random null by abs-max force."""
         return TFForceValidation(waves=waves, enriched_links=enriched_links, **kwargs)
+
+
+class TrajectorySegments:
+    """A dataset's trajectory topology, declared once as named segments.
+
+    Each segment is a ``trajectory_range`` on the shared dictys network and gets
+    its own :class:`TemporalManager` (hence its own :class:`TFForceSource`); the
+    smoothing settings are shared.  A linear trajectory is one segment; a
+    branched one is one segment per branch.  Everything that spans segments --
+    the force selector, validation, the multi-set comparisons -- is derived here,
+    so segment names and ranges are typed exactly once.
+
+    Segments are topology only.  *Phases* are orthogonal: they are cell-state
+    composition switches along a segment (:meth:`state_frequency` ->
+    ``termination_pseudotime``) that the softmax peaks of prioritised links are
+    binned into (:meth:`phases`), on a linear trajectory just as on a branch.
+
+    Parameters
+    ----------
+    dictys_dynamic_object
+        The loaded dictys dynamic network every segment reads from.
+    segments
+        ``{name: (start_node, end_node)}`` trajectory endpoints per segment, e.g.
+        ``{"PB": (0, 2), "GC": (0, 3)}`` or ``{"linear": (0, 1)}``.
+    num_points, dist, sparsity
+        Smoothing settings shared by every segment.
+    output_dir
+        Root for per-segment outputs; segment ``name`` writes under
+        ``output_dir/name``.  ``None`` keeps results in memory only.
+    """
+
+    def __init__(
+        self,
+        dictys_dynamic_object: "dynamic_network",
+        segments: dict[str, tuple[float, float]],
+        *,
+        num_points: int = 40,
+        dist: float = 0.001,
+        sparsity: float = 0.01,
+        output_dir: str | None = None,
+    ):
+        if not segments:
+            raise ValueError("TrajectorySegments needs at least one segment.")
+        self.dictys_dynamic_object = dictys_dynamic_object
+        self.segments = {name: tuple(rng) for name, rng in segments.items()}
+        self._managers = {
+            name: TemporalManager(
+                dictys_dynamic_object,
+                trajectory_range=rng,
+                num_points=num_points,
+                dist=dist,
+                sparsity=sparsity,
+                output_dir=os.path.join(output_dir, name) if output_dir else None,
+            )
+            for name, rng in self.segments.items()
+        }
+        self._waves: dict[str, TFForceWaves] | None = None
+
+    # ------------------------------------------------------------------ #
+    # per-segment access                                                   #
+    # ------------------------------------------------------------------ #
+
+    @property
+    def names(self) -> list[str]:
+        return list(self.segments)
+
+    def __getitem__(self, name: str) -> TemporalManager:
+        """The segment's manager: episodes, curves, phases and validation on it."""
+        if name not in self._managers:
+            raise KeyError(f"No segment {name!r}. Segments: {self.names}")
+        return self._managers[name]
+
+    def __len__(self) -> int:
+        return len(self.segments)
+
+    def sources(self) -> dict[str, TFForceSource]:
+        """``{name: TFForceSource}``, one per segment."""
+        return {name: mgr.force_source() for name, mgr in self._managers.items()}
+
+    def waves(self) -> dict[str, TFForceWaves]:
+        """``{name: TFForceWaves}``, one per segment on its source (built once, so
+        ``compute_forces`` results stay cached across the cross-segment methods)."""
+        if self._waves is None:
+            self._waves = {name: mgr.waves() for name, mgr in self._managers.items()}
+        return self._waves
+
+    # ------------------------------------------------------------------ #
+    # cross-segment: forces, validation                                    #
+    # ------------------------------------------------------------------ #
+
+    def selector(self, network_type: str = "w_in") -> TFForceWaves.ForceSelector:
+        """A :class:`TFForceWaves.ForceSelector` over every segment."""
+        return TFForceWaves.ForceSelector(self.waves(), network_type=network_type)
+
+    def validate(
+        self,
+        enriched_links: Sequence[tuple[str, str]],
+        network_type: str = "w_in",
+        mode: str | None = None,
+        **kwargs: Any,
+    ) -> TFForceValidation:
+        """Enriched-vs-random validation by abs-max force across the segments.
+
+        ``mode`` defaults to ``'combined'`` (each link on its stronger segment)
+        with several segments and ``'lineage'`` with one.
+        """
+        if mode is None:
+            mode = "combined" if len(self) > 1 else "lineage"
+        return TFForceValidation(
+            self.selector(network_type), enriched_links,
+            network_type=network_type, mode=mode, **kwargs,
+        )
+
+    def compare_sets(
+        self,
+        enriched_sets: dict[str, Sequence[tuple[str, str]]],
+        network_type: str = "w_in",
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        """Several enriched sets vs one shared random null across the segments
+        (:meth:`TFForceValidation.compare_sets`)."""
+        return TFForceValidation.compare_sets(
+            self.selector(network_type), enriched_sets,
+            network_type=network_type, **kwargs,
+        )
+
+    def compare_sets_by_phase(
+        self,
+        enriched_sets: dict[str, Sequence[tuple[str, str]]],
+        switch_pseudotimes: dict[str, Sequence[float]],
+        network_type: str = "w_in",
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        """The per-(segment, phase) form of :meth:`compare_sets`
+        (:meth:`TFForceValidation.compare_sets_by_phase`); ``switch_pseudotimes``
+        is ``{segment name: phase boundaries}``."""
+        unknown = set(switch_pseudotimes) - set(self.segments)
+        if unknown:
+            raise KeyError(f"switch_pseudotimes names unknown segment(s) {sorted(unknown)}. "
+                           f"Segments: {self.names}")
+        return TFForceValidation.compare_sets_by_phase(
+            self.selector(network_type), enriched_sets, switch_pseudotimes,
+            network_type=network_type, **kwargs,
+        )
+
+    # ------------------------------------------------------------------ #
+    # phases along one segment                                             #
+    # ------------------------------------------------------------------ #
+
+    def state_frequency(self, name: str, cell_labels: Any, **kwargs: Any) -> StateFrequency:
+        """Cell-state composition along segment ``name`` (its range is filled in);
+        its ``termination_pseudotime`` values are the phase boundaries."""
+        return StateFrequency(
+            self.dictys_dynamic_object, cell_labels,
+            trajectory_range=self[name]._traj_range, **kwargs,
+        )
+
+    def phases(
+        self,
+        name: str,
+        switch_pseudotimes: Sequence[float],
+        **kwargs: Any,
+    ) -> ForceWavePhases:
+        """Bin links into phases of segment ``name`` by their softmax force-wave
+        peak, on that segment's :meth:`waves` object."""
+        return self[name].phases(switch_pseudotimes, self.waves()[name], **kwargs)
 
 
 # --------------------------------------------------------------------------- #
