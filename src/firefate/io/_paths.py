@@ -82,6 +82,42 @@ class DatasetPaths:
 
         return cls(scalars=scalars, groups=groups, source=str(path))
 
+    @classmethod
+    def find(
+        cls,
+        filename: str = "datasets.yaml",
+        start: str | Path | None = None,
+        env: str = "FIREFATE_DATASETS",
+    ) -> "DatasetPaths":
+        """Locate the dataset YAML without hard-coding where the kernel started.
+
+        Resolution order:
+
+        1. the environment variable ``env`` (default ``FIREFATE_DATASETS``), when
+           set, is taken as the YAML path;
+        2. otherwise walk up from ``start`` (default: the current working
+           directory) and use the first ``filename`` found.
+
+        Notebooks under ``temporal/<subdir>/`` therefore find ``temporal/datasets.yaml``
+        whether the kernel was started in the notebook's folder (the nbconvert
+        default) or anywhere below ``temporal/``; a kernel started elsewhere sets
+        ``FIREFATE_DATASETS`` once instead of hard-coding an absolute path in a cell.
+        """
+        import os
+
+        override = os.environ.get(env)
+        if override:
+            return cls.from_yaml(override)
+        here = Path(start or Path.cwd()).resolve()
+        for folder in (here, *here.parents):
+            candidate = folder / filename
+            if candidate.is_file():
+                return cls.from_yaml(candidate)
+        raise FileNotFoundError(
+            f"No {filename} found in {here} or any parent directory. Start the kernel "
+            f"inside the notebook tree, pass start=, or set ${env} to the YAML path."
+        )
+
     # ------------------------------------------------------------------ #
     # access                                                               #
     # ------------------------------------------------------------------ #
