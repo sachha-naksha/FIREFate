@@ -158,9 +158,14 @@ class TemporalManager(BaseManager):
 
         beta_curves, dtime = curves.get_beta_curves(list(links), network_type=network_type)
         tf_expression_df, _ = curves.get_smoothed_curves(mode="tf_expression")
+        # Regulator expression over the SAME sampled points as the beta curves (one
+        # column per point), exactly as TFForceWaves.compute_forces pairs them. The
+        # previous `.iloc[:, -1]` handed the kernel a single-column Series, which it
+        # rejects (ISSUES.md #24).
         tfs = beta_curves.index.get_level_values(0).unique()
-        tf_expression = tf_expression_df.loc[tfs].iloc[:, -1]
+        tf_expression = tf_expression_df.loc[tfs]
         force_curves = SmoothedCurvesGRN.calculate_force_curves(beta_curves, tf_expression)
+        force_curves.attrs["network_type"] = network_type
         return self._store("transition_window", (beta_curves, force_curves, dtime))
 
     # ------------------------------------------------------------------ #

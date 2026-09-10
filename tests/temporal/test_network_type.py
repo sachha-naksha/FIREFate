@@ -159,6 +159,19 @@ class TestManagerNetworkType:
                                  network_type="w_in")
         assert isinstance(enr, pd.DataFrame)
 
+    def test_transition_window_forces_match_the_waves(self, mgr, mock_network):
+        # ISSUES.md #24: used to pass the LAST expression column as a Series and
+        # raise; now pairs the full expression frame, like compute_forces.
+        beta, forces, dtime = mgr.build_transition_window([LINK])
+        waves = _waves(mock_network)
+        waves.compute_forces([LINK])
+        pd.testing.assert_frame_equal(beta, waves.beta_curves)
+        pd.testing.assert_frame_equal(forces, waves.force_curves)
+        assert forces.attrs["network_type"] == "w_in"
+        _, forces_w, _ = mgr.build_transition_window([LINK], network_type="w")
+        waves.compute_forces([LINK], network_type="w")
+        pd.testing.assert_frame_equal(forces_w, waves.force_curves)
+
     def test_validate_forwards_the_parameter(self, mgr):
         waves = mgr.waves()
         assert mgr.validate(waves, [LINK]).network_type == "w_in"

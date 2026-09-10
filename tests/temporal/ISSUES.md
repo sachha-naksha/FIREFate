@@ -760,6 +760,20 @@ refactor, in stages, so the shared parts are shared by construction:
   in every context, and that the episodic and wave forces of a link are equal
   once both are given the same network (and differ under the defaults).
 
+### 24. `TemporalManager.build_transition_window` handed the force kernel a Series
+
+With ``links`` given it took ``tf_expression_df.loc[tfs].iloc[:, -1]`` -- the
+LAST sampled point only, as a Series -- and passed it to
+``calculate_force_curves``, which requires a DataFrame with one column per
+point and raises ``ValueError``.  So the "beta curves and forces over the whole
+window" path was unreachable.
+
+**Status: FIXED (2026-09-10).**  It now pairs the full regulator-expression
+frame with the beta curves, exactly as ``TFForceWaves.compute_forces`` does, and
+stamps ``network_type`` on the result.  Pinned by
+`test_network_type.py::TestManagerNetworkType::test_transition_window_forces_match_the_waves`,
+which asserts the manager's forces equal the waves' forces for the same links.
+
 ---
 
 ## Checked and found correct
