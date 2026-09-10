@@ -238,18 +238,35 @@ class TestManagerSharesOneSource:
             TemporalManager(output_dir=str(tmp_path)).force_source()
 
 
-class TestLinearTrajectoryIsOneSegment:
-    def test_no_switches_means_a_single_phase(self):
+class TestLinearTrajectoryIsOneSegmentWithPhases:
+    """Segments are topology; phases are cell-state composition switches along a
+    segment.  A linear trajectory (one source, no branches) still has ``N + 1``
+    phases for ``N`` switches, and link peaks are binned into them."""
+
+    SWITCHES = [0.6, 1.4]          # e.g. two state terminations along (0, 2)
+
+    def test_switches_on_one_segment_define_phases(self):
+        phases = RegulatoryPhases(self.SWITCHES)
+        assert phases.n_phases == 3
+        assert [phases.phase_of(p) for p in (0.1, 0.6, 1.0, 1.4, 1.9)] == [1, 1, 2, 2, 3]
+
+    def test_link_peaks_are_binned_into_the_segment_s_phases(self, source):
+        waves = TFForceWaves(source=source)
+        waves.compute_forces(LINKS)
+        fwp = ForceWavePhases(self.SWITCHES, waves=waves)
+        df = fwp.classify_phases()
+        assert len(df) == len(waves.force_curves)
+        assert set(df["phase"]) <= {1, 2, 3}
+        peaks = fwp.link_peak_pseudotimes()
+        for row in df.itertuples(index=False):
+            peak = peaks[(row.TF, row.Target)]["pseudotime"]
+            assert row.peak_pseudotime == pytest.approx(peak)
+            assert row.phase == int(np.digitize(peak, self.SWITCHES, right=True)) + 1
+
+    def test_no_switches_is_the_degenerate_single_phase(self):
         phases = RegulatoryPhases([])
         assert phases.n_phases == 1
         assert phases.phase_of(0.0) == 1 and phases.phase_of(5.0) == 1
-
-    def test_force_wave_phases_without_switches(self, source):
-        waves = TFForceWaves(source=source)
-        waves.compute_forces(LINKS)
-        df = ForceWavePhases([], waves=waves).classify_phases()
-        assert set(df["phase"]) == {1}
-        assert len(df) == len(waves.force_curves)
 
     def test_single_branch_selector_combined_mode(self, source):
         waves = TFForceWaves(source=source)

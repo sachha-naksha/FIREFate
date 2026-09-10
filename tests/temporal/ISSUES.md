@@ -783,8 +783,11 @@ refactor, in stages, so the shared parts are shared by construction:
   `TemporalManager.force_source()` builds one per manager and hands it to every
   episode and `waves()` it creates, so eight episodes slice one smoothing instead
   of repeating it.  Episodes keep only their beta-level invariance filter and
-  their reduction.  A linear trajectory is one source with no switches (one
-  phase); a branched one is one source per branch under `ForceSelector`.
+  their reduction.  A linear trajectory is one source; a branched one is one
+  source per branch under `ForceSelector`.  Segments are topology only: phases
+  remain what they are on any segment -- cell-state composition switches
+  (termination / depletion) that the softmax peaks of prioritised links are
+  binned into -- so a linear trajectory with `N` switches has `N + 1` phases.
   Numbers unchanged; pinned by `test_force_source.py`.
 
 ### 24. `TemporalManager.build_transition_window` handed the force kernel a Series

@@ -21,6 +21,13 @@ class TFForceSource:
     ``dist``.  A linear trajectory is one segment; a branched one is one segment
     per branch, combined downstream by :class:`TFForceWaves.ForceSelector`.
 
+    Segments are about trajectory *topology* only.  *Phases* are orthogonal:
+    they are set by cell-state composition switches along a segment (a state
+    terminating or being depleted, see :meth:`RegulatoryPhases.from_states`),
+    and the softmax peak of every prioritised link's force wave is binned into
+    one of them.  A linear trajectory with ``N`` such switches therefore has
+    ``N + 1`` phases exactly as a branch does.
+
     Every consumer -- episodic construction (:class:`EpisodeDynamics`), force
     waves / phases (:class:`TFForceWaves`) and validation -- draws from one of
     these, so they share by construction:
