@@ -697,6 +697,51 @@ accident:
 Items 15 and 22 have no behavioural test (they are about worker memory use and
 packaging metadata respectively).
 
+### 23. Episodic `avg_force` and phase assignment reduce the same force curve differently
+
+Asked on 2026-09-10: is the TF force averaged over an episode in one place and not
+in the other?  Yes, and that is the only difference in the force *value*; the
+per-timepoint formula is shared.
+
+**Per-timepoint force is identical.**  `calculate_force_curves_chunk`
+(`_forces.py`, episodic path) and `SmoothedCurvesGRN.calculate_force_curves`
+(`_curves.py`, phase path) both compute
+`sign(beta) * exp(log10(|beta| + 1e-10) + log10(tf_expr + 1e-10))` (see item 7).
+
+**Time reduction differs.**
+
+| path | reduction over time | what it feeds |
+| --- | --- | --- |
+| episodic enrichment (`_episodes.py`, `calculate_forces`) | `force_curves.mean(axis=1)`: plain arithmetic mean of the *signed* force over the episode's time points; zero time points count in the denominator | `avg_force`, thresholded by `|avg_force|` percentile in `select_top_edges` |
+| phase definition (`_phases.py`, `get_max_points` / `aggregate_max_points`) | no mean over the curve: softmax over `|force|` across all time points, top 5 points kept, softmax-weighted mean of their *pseudotimes* | only the peak pseudotime is read by `assign_phases`; the weighted force value it also returns is never used for binning |
+| link validation (`_validation.py`) | `max_t |force(t)|` over the trajectory | enriched-vs-random comparison |
+
+The mean is defensible in the episodic path because those edges have already
+passed `filter_edges_by_significance_and_direction` (direction invariant, so the
+sign never flips inside the episode and the mean is a typical magnitude with a
+sign).  The phase path scores arbitrary links with no such filter, so a mean
+could cancel across sign changes; the softmax peak avoids that.
+
+**Inputs also differ, so magnitudes are not comparable across the two paths.**
+
+* Beta network: episodic `build_episode_grn` calls `stat.net(obj)` with the
+  dictys default `varname='w'` (non-normalised direct effect), smoothed over the
+  whole branch and sliced to the episode window.  The phase path calls
+  `get_beta_curves(links, varname='w_in')` (normalised total effect).
+* Edge set: episodic forces exist only for edges that survived the t-test and
+  direction filter; the phase path scores whatever links are passed in.
+* Time span: episodic averages over the episode slice only; the phase path looks
+  across the full trajectory of the branch.
+* TF expression: episodic slices TF rows from the all-gene `stat.lcpm` curve,
+  the phase path uses the TF-only `lcpm_tf` stat.  Both are `log2(CPM + 1)` with
+  `cut=0`, so the values agree.
+
+Because of item 7, `avg_force` is the mean of the compressed force, not the
+mean of `beta * tf_expr`.
+
+**Status: BY DESIGN.**  Recorded so the two conventions are not mistaken for a
+bug when episodic and phase outputs are compared.  No code change.
+
 ---
 
 ## Checked and found correct
