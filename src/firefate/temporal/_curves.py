@@ -12,6 +12,7 @@ from dictys.net import stat
 from numpy.typing import NDArray
 from scipy import stats
 from firefate.backends.dictys._stats import lcpm_tf
+from firefate.temporal._forces import calculate_force_curves as _calculate_force_curves
 from firefate.utils.genes import get_gene_indices, get_tf_indices
 import matplotlib
 import matplotlib.pyplot as plt
@@ -233,75 +234,28 @@ class SmoothedCurvesGRN:
     
     @staticmethod
     def calculate_force_curves(
-        beta_curves: pd.DataFrame, 
-        tf_expression: pd.Series
+        beta_curves: pd.DataFrame,
+        tf_expression: pd.DataFrame,
+        epsilon: float = 1e-10,
     ) -> pd.DataFrame:
         """
-        calculates regulatory force curves using log transformation.
+        regulatory force curves for ``beta_curves``.
 
-        force is a sign-preserving log-space compression of beta * tf_expression,
-        not the raw product::
-
-            force = sign(beta) * exp(log10(|beta| + eps) + log10(tf_expr + eps))
-                  = sign(beta) * ((|beta| + eps) * (tf_expr + eps)) ** (1 / ln 10)
-
-        i.e. the product raised to the power 1/ln(10) ~= 0.434 (exp of a base-10
-        log). This is intended (ISSUES.md #7): it is monotone in the product, so
-        edge rankings at a given time point are unchanged, but the magnitudes are
-        compressed and time-averages of them are not averages of beta * tf_expr.
+        thin wrapper over the package's single force kernel,
+        :func:`firefate.temporal._forces.calculate_force_curves` (ISSUES.md #23).
+        see its docstring for the formula -- a sign-preserving log-space
+        compression of beta * tf_expression (ISSUES.md #7) -- and for the
+        name-based alignment of TF expression to beta rows (ISSUES.md #2).
 
         args:
             beta_curves: DataFrame with regulatory coefficients (multi-indexed by tf and target)
-            tf_expression: Series with tf expression values
-            
+            tf_expression: DataFrame indexed by TF with the same time columns as ``beta_curves``
+            epsilon: small value added before the logs
+
         returns:
             dataframe with calculated force curves
         """
-        # Align TF expression to the beta rows BY NAME (ISSUES.md #2).
-        #
-        # The previous implementation repeated the expression rows by
-        # `value_counts()` (descending target count) onto the frame in row order,
-        # so the pairing was positional and only correct when the caller had
-        # already ordered the expression rows like the beta frame's TF groups.
-        # Reindexing on the row-level TF labels makes it structural.
-        if not isinstance(tf_expression, pd.DataFrame):
-            raise ValueError(
-                "tf_expression must be a DataFrame indexed by TF with one column "
-                "per time point (same columns as beta_curves)."
-            )
-        row_tfs = beta_curves.index.get_level_values(0)
-        missing = row_tfs.unique().difference(tf_expression.index)
-        if len(missing) > 0:
-            raise KeyError(
-                f"TF expression missing for {len(missing)} regulator(s): "
-                f"{sorted(missing)[:10]}{' ...' if len(missing) > 10 else ''}"
-            )
-        expanded_tf_expr = tf_expression.reindex(row_tfs)
-        expanded_tf_expr.index = beta_curves.index
-        
-        # convert to numpy arrays for calculations
-        beta_array = beta_curves.to_numpy()
-        tf_array = expanded_tf_expr.to_numpy()
-        
-        # add small epsilon to avoid log(0)
-        epsilon = 1e-10
-        log_beta = np.log10(np.abs(beta_array) + epsilon)
-        log_tf = np.log10(tf_array + epsilon)
-        
-        # peserve signs from original beta values
-        signs = np.sign(beta_array)
-        
-        # calculate forces
-        force_array = signs * np.exp(log_beta + log_tf)
-        
-        # convert back to DataFrame with original index/columns
-        force_curves = pd.DataFrame(
-            force_array, 
-            index=beta_curves.index, 
-            columns=beta_curves.columns
-        )
-        
-        return force_curves
+        return _calculate_force_curves(beta_curves, tf_expression, epsilon=epsilon)
 
     @staticmethod
     def calculate_auc(dx: NDArray[float], dy: NDArray[float]) -> NDArray[float]:

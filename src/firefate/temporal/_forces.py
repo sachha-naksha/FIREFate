@@ -251,11 +251,17 @@ def filter_chunk_of_edges(
     return results
 
 
-def calculate_force_curves_chunk(
-    beta_chunk: pd.DataFrame, tf_expression: pd.DataFrame, epsilon: float = 1e-10
+def calculate_force_curves(
+    beta_curves: pd.DataFrame, tf_expression: pd.DataFrame, epsilon: float = 1e-10
 ) -> pd.DataFrame:
     """
-    Calculate force curves for a chunk of beta values using log transformation
+    The package's single TF-force kernel (ISSUES.md #23).
+
+    Every force in ``firefate.temporal`` goes through here: the episodic path via
+    :func:`calculate_force_curves_parallel` (one call per chunk) and the phase /
+    validation path via :meth:`SmoothedCurvesGRN.calculate_force_curves`, which
+    delegates to this. The paths differ only in which beta network and time
+    window they feed in, never in the formula.
 
     The force is a sign-preserving log-space compression of beta * tf_expression,
     not the raw product::
@@ -269,13 +275,20 @@ def calculate_force_curves_chunk(
     time-averaged ``avg_force`` is not the average of beta * tf_expr.
 
     Parameters:
-        beta_chunk: DataFrame chunk with multi-index (TF, Target) and time columns
-        tf_expression: DataFrame with TF expression values (TF as index, time as columns)
+        beta_curves: DataFrame with multi-index (TF, Target) and time columns
+        tf_expression: DataFrame with TF expression values (TF as index, same time
+            columns as ``beta_curves``)
         epsilon: Small value to avoid log(0)
 
     Returns:
-        DataFrame with force curves for the chunk
+        DataFrame with force curves, same index and columns as ``beta_curves``
     """
+    if not isinstance(tf_expression, pd.DataFrame):
+        raise ValueError(
+            "tf_expression must be a DataFrame indexed by TF with one column "
+            "per time point (same columns as beta_curves)."
+        )
+
     # Align TF expression to the beta rows BY NAME.
     #
     # The previous implementation took `value_counts()` (which orders TFs by
@@ -286,7 +299,7 @@ def calculate_force_curves_chunk(
     # unequal, so in practice most edges were scaled by another TF's expression.
     # Reindexing on the row-level TF labels makes the pairing structural instead of
     # positional.
-    row_tfs = beta_chunk.index.get_level_values(0)
+    row_tfs = beta_curves.index.get_level_values(0)
     missing = row_tfs.unique().difference(tf_expression.index)
     if len(missing) > 0:
         raise KeyError(
@@ -294,10 +307,10 @@ def calculate_force_curves_chunk(
             f"{sorted(missing)[:10]}{' ...' if len(missing) > 10 else ''}"
         )
     expanded_tf_expr = tf_expression.reindex(row_tfs)
-    expanded_tf_expr.index = beta_chunk.index
+    expanded_tf_expr.index = beta_curves.index
 
     # Convert to numpy arrays for calculations
-    beta_array = beta_chunk.to_numpy()
+    beta_array = beta_curves.to_numpy()
     tf_array = expanded_tf_expr.to_numpy()
 
     # Log transformations
@@ -312,11 +325,16 @@ def calculate_force_curves_chunk(
     force_array = signs * np.exp(log_beta + log_tf)
 
     # Convert back to DataFrame
-    force_chunk = pd.DataFrame(
-        force_array, index=beta_chunk.index, columns=beta_chunk.columns
+    force_curves = pd.DataFrame(
+        force_array, index=beta_curves.index, columns=beta_curves.columns
     )
 
-    return force_chunk
+    return force_curves
+
+
+# ``calculate_force_curves_parallel`` submits the kernel once per chunk under this
+# name; kept as an alias for existing callers and tests.
+calculate_force_curves_chunk = calculate_force_curves
 
 
 def calculate_force_curves_parallel(

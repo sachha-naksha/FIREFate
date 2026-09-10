@@ -740,7 +740,16 @@ Because of item 7, `avg_force` is the mean of the compressed force, not the
 mean of `beta * tf_expr`.
 
 **Status: BY DESIGN.**  Recorded so the two conventions are not mistaken for a
-bug when episodic and phase outputs are compared.  No code change.
+bug when episodic and phase outputs are compared.  Follow-up
+refactor, in stages, so the shared parts are shared by construction:
+
+* Stage 1 (2026-09-10, done): one force kernel.  `_forces.calculate_force_curves`
+  is the only implementation; `SmoothedCurvesGRN.calculate_force_curves` delegates
+  to it and `calculate_force_curves_chunk` is an alias.  Pinned by
+  `test_force_kernel.py`, which asserts every entry point is the same function.
+* Stage 2 (planned): a `varname` parameter on each consumer with the current
+  defaults (`w` for episodic construction, `w_in` for phases and validation),
+  threaded through the manager, and recorded on the outputs.
 
 ---
 

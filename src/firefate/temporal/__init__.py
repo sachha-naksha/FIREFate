@@ -34,6 +34,7 @@ from firefate.temporal._episodes import (
     sort_tfs_by_gene_similarity,
 )
 from firefate.temporal._forces import (
+    calculate_force_curves,
     calculate_force_curves_parallel,
     filter_edges_by_significance_and_direction,
     get_unique_regs_by_target,
@@ -92,6 +93,7 @@ __all__ = [
     "TFForceWaves",
     "TemporalManager",
     "aggregate_max_points",
+    "calculate_force_curves",
     "calculate_force_curves_parallel",
     "cluster_heatmap",
     "create_pathway_color_scheme",
