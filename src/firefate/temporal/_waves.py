@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from firefate.temporal._curves import SmoothedCurvesGRN
+from firefate.temporal._reductions import abs_max_force
 import matplotlib
 import numpy as np
 from scipy.cluster.hierarchy import dendrogram, leaves_list, linkage
@@ -217,12 +218,8 @@ class TFForceWaves:
             force_curves.attrs['network_type'] = self.network_type
             return force_curves, dtime
 
-        @staticmethod
-        def abs_max(force_curves, links=None):
-            """``max_t |force(t)|`` per link as a dict {(TF, Target): float}."""
-            idx = force_curves.index if links is None else links
-            return {l: float(force_curves.loc[l].abs().max())
-                    for l in idx if l in force_curves.index}
+        # ``max_t |force(t)|`` per link -- the validation reduction (_reductions).
+        abs_max = staticmethod(abs_max_force)
 
         def force_curves(self, links, branch=None):
             """``(force_curves, dtime)`` for ``links`` on one lineage (default: first)."""

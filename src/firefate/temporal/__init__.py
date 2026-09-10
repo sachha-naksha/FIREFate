@@ -39,6 +39,11 @@ from firefate.temporal._forces import (
     filter_edges_by_significance_and_direction,
     get_unique_regs_by_target,
 )
+from firefate.temporal._reductions import (
+    abs_max_force,
+    mean_force,
+    softmax_peak,
+)
 from firefate.temporal._phases import (
     BindingPhases,
     ForceWavePhases,
@@ -92,6 +97,7 @@ __all__ = [
     "TFForceValidation",
     "TFForceWaves",
     "TemporalManager",
+    "abs_max_force",
     "aggregate_max_points",
     "calculate_force_curves",
     "calculate_force_curves_parallel",
@@ -103,9 +109,11 @@ __all__ = [
     "filter_edges_by_significance_and_direction",
     "get_episodic_grn_subset",
     "get_max_points",
+    "mean_force",
     "get_unique_regs_by_target",
     "order_links",
     "order_links_by_phase",
+    "softmax_peak",
     "plot_chromatin_tf_dynamics",
     "plot_expression_for_multiple_genes",
     "plot_force_by_tf",

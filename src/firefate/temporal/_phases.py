@@ -7,117 +7,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_hex
 from firefate.temporal._align import AlignTimeScales
+from firefate.temporal._reductions import (  # noqa: F401  (re-exported)
+    aggregate_max_points,
+    get_max_points,
+    softmax_peak,
+)
 from scipy.stats import mannwhitneyu
-
-
-def get_max_points(force_curves, dtime, top_k=5, temperature=1.0):
-    """
-    Find pseudotime points with the highest absolute force values using softmax weighting.
-
-    Parameters:
-    -----------
-    force_curves : DataFrame
-        Multi-indexed DataFrame with (TF, Target) as rows and time points as columns
-    dtime : array-like
-        Actual pseudotime values corresponding to each column/window
-    top_k : int
-        Number of top points to return per TF-Target pair
-    temperature : float
-        Temperature parameter for softmax (lower = more peaked distribution)
-
-    Returns:
-    --------
-    list of dicts: Each containing TF, Target, pseudotime, window_idx, force value, and softmax_weight
-    """
-    max_points = []
-
-    # Convert dtime to array if needed
-    dtime = np.array(dtime)
-
-    # Get unique TF-Target pairs
-    for tf_target in force_curves.index:
-        # Get the time series for this TF-Target pair
-        time_series = force_curves.loc[tf_target]
-
-        # Get absolute force values
-        abs_forces = time_series.abs()
-
-        # Apply softmax to absolute forces
-        softmax_weights = np.exp(abs_forces / temperature) / np.sum(np.exp(abs_forces / temperature))
-
-        # Get top_k indices with highest softmax weights
-        top_indices = softmax_weights.nlargest(top_k).index
-
-        for time_col in top_indices:
-            # Get the window index (column position)
-            window_idx = force_curves.columns.get_loc(time_col) if time_col in force_curves.columns else time_col
-
-            max_points.append({
-                'TF': tf_target[0],
-                'Target': tf_target[1],
-                'window_idx': window_idx,
-                'pseudotime': dtime[window_idx],
-                'force': time_series[time_col],
-                'abs_force': abs_forces[time_col],
-                'softmax_weight': softmax_weights[time_col]
-            })
-
-    return max_points
-
-
-def aggregate_max_points(max_points, method='weighted_mean'):
-    """
-    Aggregate max points to get a single pseudotime per TF-Target regulation.
-
-    Parameters:
-    -----------
-    max_points : list of dicts
-        Output from get_max_points function
-    method : str
-        Aggregation method: 'weighted_mean', 'top1', 'mean', 'median'
-
-    Returns:
-    --------
-    dict : {(TF, Target): {'pseudotime': float, 'force': float, ...}}
-    """
-    df = pd.DataFrame(max_points)
-
-    aggregated = {}
-
-    for (tf, target), group in df.groupby(['TF', 'Target']):
-        if method == 'weighted_mean':
-            # Normalize softmax weights within the group
-            weights = group['softmax_weight'] / group['softmax_weight'].sum()
-            agg_pseudotime = np.average(group['pseudotime'], weights=weights)
-            agg_force = np.average(group['force'], weights=weights)
-            agg_window_idx = int(np.round(np.average(group['window_idx'], weights=weights)))
-
-        elif method == 'top1':
-            # Take the one with highest softmax weight
-            top_row = group.loc[group['softmax_weight'].idxmax()]
-            agg_pseudotime = top_row['pseudotime']
-            agg_force = top_row['force']
-            agg_window_idx = top_row['window_idx']
-
-        elif method == 'mean':
-            agg_pseudotime = group['pseudotime'].mean()
-            agg_force = group['force'].mean()
-            agg_window_idx = int(np.round(group['window_idx'].mean()))
-
-        elif method == 'median':
-            agg_pseudotime = group['pseudotime'].median()
-            agg_force = group['force'].median()
-            agg_window_idx = int(np.round(group['window_idx'].median()))
-
-        aggregated[(tf, target)] = {
-            'pseudotime': float(agg_pseudotime),
-            'window_idx': int(agg_window_idx),
-            'force': float(agg_force),
-            'abs_force': float(abs(agg_force)),
-            'n_points': len(group)
-        }
-
-    return aggregated
 
 
 def order_links_by_phase(regulation_pseudotimes):
@@ -141,7 +36,8 @@ def order_links_by_phase(regulation_pseudotimes):
 
 def order_links(force_curves, dtime, top_k=5, temperature=1.0, method='weighted_mean'):
     """
-    Convenience wrapper: compute the phase ordering of links directly from force curves.
+    Convenience wrapper: compute the phase ordering of links directly from force curves
+    (their :func:`softmax_peak` pseudotimes, earliest first).
 
     Parameters
     ----------
@@ -162,8 +58,8 @@ def order_links(force_curves, dtime, top_k=5, temperature=1.0, method='weighted_
         * ``ordered_links`` -- list of ``(TF, Target)`` tuples sorted by peak pseudotime.
         * ``regulation_pseudotimes`` -- dict from :func:`aggregate_max_points`.
     """
-    max_points = get_max_points(force_curves, dtime, top_k=top_k, temperature=temperature)
-    regulation_pseudotimes = aggregate_max_points(max_points, method=method)
+    regulation_pseudotimes = softmax_peak(force_curves, dtime, top_k=top_k,
+                                      temperature=temperature, method=method)
     ordered_links = order_links_by_phase(regulation_pseudotimes)
     return ordered_links, regulation_pseudotimes
 
@@ -248,10 +144,8 @@ class RegulatoryPhases:
         Returns ``{(TF, Target): phase}``.
         """
         boundaries = np.sort(np.asarray(switch_pseudotimes, dtype=float))
-        reg_pt = aggregate_max_points(
-            get_max_points(force_curves, dtime, top_k=top_k, temperature=temperature),
-            method=method,
-        )
+        reg_pt = softmax_peak(force_curves, dtime, top_k=top_k,
+                              temperature=temperature, method=method)
         return {
             link: int(np.digitize(info['pseudotime'], boundaries, right=True)) + 1
             for link, info in reg_pt.items()
@@ -296,9 +190,8 @@ class ForceWavePhases(RegulatoryPhases):
             raise RuntimeError("Call waves.compute_forces(links) first.")
         df = (self.waves.force_curves if links is None
               else self.waves.force_curves.loc[links])
-        max_points = get_max_points(df, self.waves.dtime,
-                                    top_k=self.top_k, temperature=self.temperature)
-        return aggregate_max_points(max_points, method=self.method)
+        return softmax_peak(df, self.waves.dtime, top_k=self.top_k,
+                            temperature=self.temperature, method=self.method)
 
     def classify_phases(self, links=None):
         """Assign each link to a phase by its softmax peak pseudotime.

@@ -13,6 +13,7 @@ from dictys.net import stat
 from firefate.base.enrichment import calculate_tf_episodic_enrichment
 from firefate.temporal._align import AlignTimeScales
 from firefate.temporal._curves import SmoothedCurvesGRN
+from firefate.temporal._reductions import mean_force
 from firefate.temporal._forces import (
     calculate_force_curves_parallel,
     filter_edges_by_significance_and_direction,
@@ -225,7 +226,7 @@ class EpisodeDynamics:
         )
         force_curves.attrs["network_type"] = self.network_type
         self.force_curves = force_curves
-        avg_force = force_curves.mean(axis=1)
+        avg_force = mean_force(force_curves)
         avg_force_df = avg_force.to_frame(name="avg_force")
         avg_force_df.attrs["network_type"] = self.network_type
         self.avg_force_df = avg_force_df

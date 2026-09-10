@@ -759,6 +759,18 @@ refactor, in stages, so the shared parts are shared by construction:
   `test_network_type.py`: the defaults, that an override reaches the beta curves
   in every context, and that the episodic and wave forces of a link are equal
   once both are given the same network (and differ under the defaults).
+* Stage 3 (2026-09-10, done): the three time reductions are named functions in
+  `_reductions.py`, side by side with the reason each context uses its own:
+  `mean_force` (episodic `avg_force`), `softmax_peak` (phase peak pseudotime;
+  `get_max_points` / `aggregate_max_points` moved here and are re-exported from
+  `_phases`) and `abs_max_force` (validation; `ForceSelector.abs_max` is now that
+  function).  `EpisodeDynamics.calculate_forces`, `RegulatoryPhases.assign_phases`,
+  `ForceWavePhases.link_peak_pseudotimes` and `order_links` call them.  Pinned by
+  `test_reductions.py`: what each computes, that the consumers route through
+  them, and that the three give different numbers for one curve.
+* Stage 4 (planned): one cached force source per trajectory segment that both
+  the episodic and the wave paths draw forces from, so that a linear trajectory
+  is one segment and a branched one is several.
 
 ### 24. `TemporalManager.build_transition_window` handed the force kernel a Series
 
