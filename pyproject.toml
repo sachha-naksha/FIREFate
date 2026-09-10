@@ -3,9 +3,9 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "firefate"
+name = "focalfire"
 version = "0.0.1"
-description = "FIREFate: Functional and Interpretable Regulatory Encoding of cell Fate decisions"
+description = "FocalFire: Functional and Interpretable Regulatory Encoding of cell Fate decisions"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
@@ -33,7 +33,7 @@ docs = [
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.0",
     "sphinx-autobuild>=2024.0.0",
-    # renders the firefate_notebooks submodule at docs/notebooks
+    # renders the focalfire_notebooks submodule at docs/notebooks
     "myst-nb>=1.1",
 ]
 

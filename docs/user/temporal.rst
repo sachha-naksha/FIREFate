@@ -3,8 +3,8 @@ Temporal
 How TF regulation changes *along* a trajectory: transition-window and episodic GRNs,
 force waves, regulatory phases (capabilities 3, 4 and dynamic 5).
 
-.. module:: firefate.temporal
-.. currentmodule:: firefate
+.. module:: focalfire.temporal
+.. currentmodule:: focalfire
 
 Manager
 -------

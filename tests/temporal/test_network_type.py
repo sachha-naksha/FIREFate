@@ -12,14 +12,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from firefate.temporal import (
+from focalfire.temporal import (
     EpisodeDynamics,
     SmoothedCurvesGRN,
     TemporalManager,
     TFForceValidation,
     TFForceWaves,
 )
-from firefate.temporal.manager import run_episodic_construction
+from focalfire.temporal.manager import run_episodic_construction
 from conftest import VARNAME_SCALE
 
 TRAJ = (0, 2)

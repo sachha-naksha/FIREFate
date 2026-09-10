@@ -1,7 +1,7 @@
 Seven capabilities
 ==================
 
-FIREFate is organized around seven capabilities. They are the scientific contract for the
+FocalFire is organized around seven capabilities. They are the scientific contract for the
 framework: the README and API are aligned with this list.
 
 1. **Discover cellular programs (CPs)** underlying contrasting cell states using interpretable
@@ -27,13 +27,13 @@ framework: the README and API are aligned with this list.
 7. **Stratify uncommitted populations for fate-bias** using CPs inferred from intervention (for
    example gene knockout) versus unperturbed control populations.
 
-**FIREFate-NP (Network Prioritization)** refers to the downstream workflow that combines static and
+**FocalFire-NP (Network Prioritization)** refers to the downstream workflow that combines static and
 dynamic GRNs with interpretable ML to obtain sparse gene sets (CPs) that distinguish cell fates,
 then embeds them in high-resolution GRNs to surface TF-centric regulons.
 
 Implementation note
 -------------------
 
-The pip-installable package under ``src/firefate/`` is growing toward full coverage of all seven
+The pip-installable package under ``src/focalfire/`` is growing toward full coverage of all seven
 capabilities. Episodic dynamics, smoothed GRN curves, enrichment orchestration, and state-specific
 GRN helpers are represented in the current API; see the :doc:`user API <user/index>` for module-level detail.

@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 from dictys.net import stat
 
-from firefate.temporal import (
+from focalfire.temporal import (
     EpisodeDynamics,
     ForceWavePhases,
     RegulatoryPhases,

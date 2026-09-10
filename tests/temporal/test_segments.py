@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from firefate.temporal import (
+from focalfire.temporal import (
     EpisodeDynamics,
     ForceWavePhases,
     TemporalManager,
@@ -20,7 +20,7 @@ from firefate.temporal import (
     TFForceWaves,
     TrajectorySegments,
 )
-from firefate.temporal import manager as manager_module
+from focalfire.temporal import manager as manager_module
 
 SETTINGS = dict(num_points=10, dist=0.3, sparsity=0.1)
 BRANCHES = {"PB": (0, 2), "GC": (0, 3)}       # mock: node 1 branches to nodes 2 and 3

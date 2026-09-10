@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Manage Claude Code parallel worktrees for FIREFate.
+# Manage Claude Code parallel worktrees for FocalFire.
 # Worktrees live under ./worktrees/<name> (gitignored) on branch wt/<name>.
 #   ./wt new <name> [base]   create worktree from <base> (default: current HEAD)
 #   ./wt ls                  list worktrees

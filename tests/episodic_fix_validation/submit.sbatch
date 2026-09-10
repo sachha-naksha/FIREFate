@@ -23,7 +23,7 @@
 # dictys.net.network.from_file would otherwise load (~25 GB of the 35 GB).
 #
 # Submit with:
-#     cd FIREFate/tests/episodic_fix_validation && sbatch submit.sbatch
+#     cd FocalFire/tests/episodic_fix_validation && sbatch submit.sbatch
 
 set -euo pipefail
 
@@ -46,7 +46,7 @@ echo "cpus        : ${SLURM_CPUS_PER_TASK:-?}"
 echo "mem         : ${SLURM_MEM_PER_NODE:-?} MB"
 echo "started     : $(date -Is)"
 echo "python      : $PY"
-"$PY" -c "import firefate; print('firefate     :', firefate.__file__)"
+"$PY" -c "import focalfire; print('focalfire     :', focalfire.__file__)"
 "$PY" -c "import dictys;   print('dictys       :', dictys.__file__)"
 echo
 

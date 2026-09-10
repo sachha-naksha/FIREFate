@@ -1,11 +1,11 @@
-# FIREFate module structure — proposal (moscot-inspired)
+# FocalFire module structure — proposal (moscot-inspired)
 
 Status: **ACCEPTED and implemented for the Temporal pass.** Supersedes §6 and §10 of
 `architecture.md`. See §7 for what was built and where it deviates from this plan.
 
 ## 0. The organising idea
 
-FIREFate is three modules in one package:
+FocalFire is three modules in one package:
 
 | Module | Capabilities (docs/capabilities.rst) | Question it answers |
 |---|---|---|
@@ -15,7 +15,7 @@ FIREFate is three modules in one package:
 
 moscot's layout maps onto this almost one-to-one:
 
-| moscot | FIREFate | why |
+| moscot | FocalFire | why |
 |---|---|---|
 | `base/problems/{problem,manager,_mixins}.py` | `base/{problem,manager,mixins}.py` | one abstract contract, N concrete modules |
 | `problems/{time,space,cross_modality}/` | `temporal/`, `state_specific/`, `cross_prediction/` | the domain split |
@@ -35,11 +35,11 @@ Two moscot conventions worth copying verbatim:
 ## 1. Proposed tree
 
 ```
-src/firefate/
-├── __init__.py                  # version + `from firefate import temporal, state_specific, cross_prediction`
+src/focalfire/
+├── __init__.py                  # version + `from focalfire import temporal, state_specific, cross_prediction`
 ├── _types.py                    # PathLike_t, EdgeTable_t, CurveMode_t, DictysNet_t, ...
 ├── _constants.py                # column names ('avg_force', 'p_value'), mode enums, defaults
-├── _logging.py                  # logging.getLogger("firefate")
+├── _logging.py                  # logging.getLogger("focalfire")
 ├── py.typed
 │
 ├── base/                        # contracts every module obeys
@@ -61,7 +61,7 @@ src/firefate/
 │   ├── celloracle/              # links → GRN tables, in-silico KO         [grn/state_specific.py, 05_sim]
 │   └── slide/                   # R SLIDE / ESCAPE subprocess wrappers  [Cross_prediction/{SLIDE,ESCAPE}/*.R]
 │
-├── temporal/                    # ============ FIREFateTemporal ============
+├── temporal/                    # ============ FocalFireTemporal ============
 │   ├── __init__.py
 │   ├── _align.py                # AlignTimeScales
 │   ├── _curves.py               # SmoothedCurvesGRN
@@ -75,7 +75,7 @@ src/firefate/
 │   │   # NB: each module above also holds ITS OWN figures — no plotting/ package
 │   └── manager.py               # TemporalManager — the module entry point
 │
-├── state_specific/              # ========= FIREFateStateSpecific =========
+├── state_specific/              # ========= FocalFireStateSpecific =========
 │   ├── __init__.py
 │   ├── _programs.py             # CP / latent-factor loading + gene-set annotation
 │   ├── _grn.py                  # state + cross-state GRN construction
@@ -84,7 +84,7 @@ src/firefate/
 │   ├── _mixins.py
 │   └── manager.py               # StateSpecificManager
 │
-├── cross_prediction/            # ======== FIREFateCrossPrediction ========
+├── cross_prediction/            # ======== FocalFireCrossPrediction ========
 │   ├── __init__.py
 │   ├── _transfer.py             # move CPs from intervention → query dataset
 │   ├── _fate_bias.py            # stratify uncommitted populations
@@ -119,7 +119,7 @@ src/firefate/
 | Source | Destination | Notes |
 |---|---|---|
 | `analysis/config.py` | `io/_paths.py` + `py_scripts/datasets.yaml` | class keeps its shape; the **absolute HPC paths move out of Python into YAML** (architecture.md §1: no HPC paths in the package) |
-| `analysis/ensure_firefate_path.py` | **deleted** | replaced by `pip install -e .` |
+| `analysis/ensure_focalfire_path.py` | **deleted** | replaced by `pip install -e .` |
 | `analysis/{episodic_dynamics,pseudotime_curves,state_dynamics,dynamic_validation,episode_plots,utils_custom}.py` | **deleted** | already pure `import *` shims |
 | `dynamic_grn/get_main_expression.py` | `cli/expression_to_tsv.py` + `io/_readers.py` | `main()` splits into an importable function + a `__main__` guard |
 | `dynamic_grn/debug_subset_cell.py` | `cli/validate_inputs.py` | currently top-level statements; wrap in `main(args)` |
@@ -131,7 +131,7 @@ src/firefate/
 
 Result: `py_scripts/` holds **only `.ipynb`** plus one `datasets.yaml`.
 
-### 2b. `src/firefate/` internal re-shuffle
+### 2b. `src/focalfire/` internal re-shuffle
 
 | Current | Destination |
 |---|---|
@@ -157,7 +157,7 @@ One manager per module, all deriving from `base/manager.py`. They are *compositi
 
 ```python
 class TemporalManager(BaseManager, TemporalAnalysisMixin):
-    """Entry point for FIREFateTemporal."""
+    """Entry point for FocalFireTemporal."""
     def __init__(self, net, *, trajectory_range=(1, 3), num_points=40,
                  dist=1e-3, sparsity=0.01, output_dir=None): ...
 
@@ -219,23 +219,23 @@ figure rests on. Those get tests first.
 14 notebooks stay in `py_scripts/`. Each gets its import block replaced by:
 
 ```python
-import firefate as ff
-from firefate.temporal import EpisodeDynamics, SmoothedCurvesGRN, TFForceWaves
-from firefate.io import DatasetPaths
+import focalfire as ff
+from focalfire.temporal import EpisodeDynamics, SmoothedCurvesGRN, TFForceWaves
+from focalfire.io import DatasetPaths
 
 paths = DatasetPaths.from_yaml("datasets.yaml")   # was: from config import *
 ```
 
 The `from X import *` + `importlib.reload(X)` idiom used in `chromatin_dynamics.ipynb`,
 `dynamic_validation.ipynb`, `episodic_enrichment.ipynb` and `phase_clustered_links.ipynb` is
-replaced by `importlib.reload(firefate.temporal._waves)` on the real module.
+replaced by `importlib.reload(focalfire.temporal._waves)` on the real module.
 
 ## 6. Also needs updating (found during the survey)
 
 - `docs/reference.rst` — every `automodule` path changes.
 - `bash_scripts/{network/1_network_reconstruct,preproc/0_get_expression}.sbatch` — currently point
   at `/ocean/projects/cis240075p/...` paths that **do not exist on this cluster**; become
-  `python -m firefate.cli.reconstruct_networks`.
+  `python -m focalfire.cli.reconstruct_networks`.
 - `bash_scripts/preproc/1b_traj_windows_parallel.sbatch` references
   `py_scripts/trajectory/process_single_edge.py`, **which is not in the repo**.
 - `references/architecture.md` §6 and §10 are superseded by this document.
@@ -298,7 +298,7 @@ pre-refactor baseline -- plus every one of the 46 modules importing cleanly and 
   `>=3.10` made `pip install -e .` refuse), and `pyyaml` added for `io/_paths.py`.
 * `docs/reference.rst`: rewritten against the new module tree.
 * `bash_scripts/{network/1_network_reconstruct,preproc/0_get_expression}.sbatch`: the dead
-  `/ocean/...` script paths became `python -m firefate.cli.*`.
+  `/ocean/...` script paths became `python -m focalfire.cli.*`.
 * `multiome_dynamic_regulation/py_scripts/NOTEBOOK_MIGRATION.md`: per-notebook cells.
 * `multiome_dynamic_regulation/py_scripts/datasets.yaml`: the paths from `config.py`.
 
@@ -319,7 +319,7 @@ The first pass split `utils/plots.py` into a `plotting/` package of six subject
 modules. That was then reversed in favour of full colocation: **a figure lives in
 the file that owns its subject**, the same rule that already put
 `plot_force_heatmap_by_phase` next to the phase classes. There is no
-`firefate.plotting` any more.
+`focalfire.plotting` any more.
 
 ### What made this safe
 
@@ -361,7 +361,7 @@ placed by subject.
   1 217; the rest are under 1 000. Compare the 3 213-line `utils/plots.py` this
   replaced. If `_episodes.py` keeps growing, the split to reach for is
   `EpisodeDynamics` vs. the enrichment-result figures, not a new plotting package.
-* **One import instead of two.** `from firefate.temporal import *` now yields the
+* **One import instead of two.** `from focalfire.temporal import *` now yields the
   classes *and* their figures, so the notebook cells got shorter, not longer.
 * **A latent bug surfaced.** `plot_main_trajectory_nodes` had been missing its
   `import networkx as nx` since it was moved out of `dynamic_grn/utils.py` — it had no

@@ -1,6 +1,6 @@
 """One TF-force kernel for the whole package (ISSUES.md #23, stage 1).
 
-``firefate.temporal._forces.calculate_force_curves`` is the kernel.  The episodic
+``focalfire.temporal._forces.calculate_force_curves`` is the kernel.  The episodic
 path reaches it through ``calculate_force_curves_parallel`` (one call per chunk)
 and the phase / validation path through ``SmoothedCurvesGRN.calculate_force_curves``.
 These tests pin that every entry point is the same function, so a change to the
@@ -11,9 +11,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from firefate.temporal import calculate_force_curves as exported_kernel
-from firefate.temporal._curves import SmoothedCurvesGRN
-from firefate.temporal._forces import (
+from focalfire.temporal import calculate_force_curves as exported_kernel
+from focalfire.temporal._curves import SmoothedCurvesGRN
+from focalfire.temporal._forces import (
     calculate_force_curves,
     calculate_force_curves_chunk,
     calculate_force_curves_parallel,

@@ -7,5 +7,5 @@ This module is scaffolded but not yet ported: the work currently lives outside t
 Python package, in ``Cross_prediction/SLIDE/Crossprediction.R`` and
 ``TF_Dynamic_Activity/``. It exports nothing yet.
 
-.. automodule:: firefate.cross_prediction
+.. automodule:: focalfire.cross_prediction
     :members:

@@ -15,12 +15,12 @@ The full description of all capabilities, the methods, the user and developer AP
 ## Notebooks
 
 The analysis notebooks live in a companion repository,
-[**firefate_notebooks**](https://github.com/sachha-naksha/firefate_notebooks), and are
+[**focalfire_notebooks**](https://github.com/sachha-naksha/focalfire_notebooks), and are
 pulled in here as a git submodule at `docs/notebooks` so the documentation can render
 them. Clone with them:
 
 ```bash
-git clone --recurse-submodules https://github.com/sachha-naksha/FIREFate
+git clone --recurse-submodules https://github.com/sachha-naksha/FocalFire
 ```
 
 If you already cloned without them:
@@ -36,8 +36,8 @@ The submodule is optional — the package installs and the API docs build withou
 User guide, API reference and the rendered notebooks are built with Sphinx and hosted on
 **Read the Docs**. The build is configured by `.readthedocs.yml`, which also tells Read the Docs to
 check out the `docs/notebooks` submodule. Point a project at this repository at
-[readthedocs.org](https://readthedocs.org/); with the slug `firefate` the site lands at
-[https://firefate.readthedocs.io/](https://firefate.readthedocs.io/).
+[readthedocs.org](https://readthedocs.org/); with the slug `focalfire` the site lands at
+[https://focalfire.readthedocs.io/](https://focalfire.readthedocs.io/).
 
 To build the HTML docs locally:
 

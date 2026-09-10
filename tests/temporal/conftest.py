@@ -1,4 +1,4 @@
-"""Shared fixtures for the FIREFate core test-suite.
+"""Shared fixtures for the FocalFire core test-suite.
 
 Everything here is hand-built mock data whose expected values can be worked out
 on paper, so that a failing test points at the library and not at the fixture.

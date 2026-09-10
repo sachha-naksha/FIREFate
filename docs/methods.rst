@@ -1,7 +1,7 @@
 Methods
 =======
 
-**FIREFate** is a framework that focuses dense mechanistic models of gene regulation, through
+**FocalFire** is a framework that focuses dense mechanistic models of gene regulation, through
 interpretable machine learning, onto the components governing cell fate decisions. It offers
 inference tasks that: (1) discover cellular programs (CPs) underlying contrasting cell states
 using an interpretable machine learning model and characterize their phenotypic roles through
@@ -19,14 +19,14 @@ phenotypic shift caused by perturbing the enriched TFs in state-specific models;
 uncommitted state populations for fate bias using CPs inferred from intervention (gene or TF
 knockout) versus unperturbed control populations.
 
-We implemented and tested FIREFate in Python (versions xx) and designed it for use in a Jupyter
-Notebook environment. FIREFate code is open source and available on GitHub at
-`github.com/sachha-naksha/FIREFate <https://github.com/sachha-naksha/FIREFate>`_ and
+We implemented and tested FocalFire in Python (versions xx) and designed it for use in a Jupyter
+Notebook environment. FocalFire code is open source and available on GitHub at
+`github.com/sachha-naksha/FocalFire <https://github.com/sachha-naksha/FocalFire>`_ and
 `github.com/xxx <https://github.com/xxx>`_, along with detailed
 function descriptions and tutorials at ``<READ-THE-DOCS>``. Additionally, we provide a
 user-friendly web application at
 `pitt-csi.shinyapps.io/firefate <https://pitt-csi.shinyapps.io/firefate/>`_ that facilitates
-FIREFate analyses and enables
+FocalFire analyses and enables
 interactive exploration of the results presented in this manuscript.
 
 
@@ -79,7 +79,7 @@ predictive performance.
 
 Before applying SLIDE, the single-cell RNA sequencing (scRNA-seq) data were preprocessed using the
 filtering and preprocessing functions provided in the SLIDE library
-(`github.com/jishnu-lab/SLIDE <https://github.com/jishnu-lab/SLIDE>`_) and the FIREFate GitHub repository
+(`github.com/jishnu-lab/SLIDE <https://github.com/jishnu-lab/SLIDE>`_) and the FocalFire GitHub repository
 (`github.com/jishnu-lab/xxxx <https://github.com/jishnu-lab/xxxx>`_), following standard best practices. First, genes with
 zero unique molecular identifier (UMI) counts across all cells were removed, and mitochondrial and
 ribosomal genes were excluded from further analysis. Second, sparsity filtering was performed using
@@ -204,10 +204,10 @@ retained as candidate combinatorial regulators contributing to subtype-specific 
 programs.
 
 
-Benchmarking FIREFate cellular programs
----------------------------------------
+Benchmarking FocalFire cellular programs
+----------------------------------------
 
-To enable direct comparison of order-1 transcriptional programs enriched by FIREFate, namely
+To enable direct comparison of order-1 transcriptional programs enriched by FocalFire, namely
 TF-centric regulons, we employed SCENIC+ to generate state-specific regulons distinguishing GC and
 PB states in the B-cell system (Supplementary Figure 1), and Tex-term and Tex-KLR states in the
 T-cell system (Supplementary Figure 2). Our workflow proceeded as follows. SCENIC+ was first applied
@@ -264,7 +264,7 @@ Smoothed regulatory curves along pseudotime
 
 All dynamic analyses operate on a dynamic GRN reconstructed with dictys, in which a window of
 cells is slid along the pseudotime trajectory and a context-specific network is inferred
-independently within every window (194 windows for the B-cell system). FIREFate's temporal module
+independently within every window (194 windows for the B-cell system). FocalFire's temporal module
 reads the resulting dynamic-network object and resolves it onto a continuous pseudotime axis
 before any downstream quantity is computed.
 
@@ -563,7 +563,7 @@ Validating dynamic TF activity
 Comparison against random regulatory links
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To test whether the links prioritized by FIREFate carry more regulatory force than expected by
+To test whether the links prioritized by FocalFire carry more regulatory force than expected by
 chance, each enriched link was compared against a size-matched null of non-enriched links using the
 absolute maximum force :math:`\max_t |F(i,j,t)|` as the statistic, the same quantity by which links
 were selected.
@@ -593,12 +593,12 @@ phase-binned on the same lineage with identical softmax parameters, and within e
 enriched and random links on the same footing at every step: the same network variable, the same
 force definition, the same peak rule, and the same phase boundaries.
 
-In-silico perturbation of FIREFate-prioritized TFs
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+In-silico perturbation of FocalFire-prioritized TFs
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The force-based comparison above asks whether the prioritized links are strong inside the dynamic
-model that produced them. As an independent check we asked whether the factors FIREFate
-prioritizes are also the ones whose loss most disturbs the fate decision in a model FIREFate did
+model that produced them. As an independent check we asked whether the factors FocalFire
+prioritizes are also the ones whose loss most disturbs the fate decision in a model FocalFire did
 not fit. Every transcription factor represented in the state-specific CellOracle GRN was knocked
 out in silico, one factor at a time, and the resulting shift of each cell was scored against the
 differentiation vector field of the trajectory, giving a per-cell perturbation score whose sign
@@ -623,9 +623,9 @@ Factors were then split into three groups: the state-specific TFs, enriched in t
 fusion-GRN analysis; the episodic TFs, enriched in the episodic GRNs; and all remaining scored
 factors, which form the background. Factors absent from the CellOracle GRN receive no perturbation
 score and were excluded from every group, and the two factors enriched in both analyses (*CREB3L2*
-and *TFEC*) were counted once when the two FIREFate groups were pooled. Each FIREFate group, and
+and *TFEC*) were counted once when the two FocalFire groups were pooled. Each FocalFire group, and
 their union, was compared against the background by a one-sided Mann--Whitney :math:`U` test on the
-overall perturbation magnitude, testing the directional hypothesis that FIREFate-prioritized
+overall perturbation magnitude, testing the directional hypothesis that FocalFire-prioritized
 factors carry larger perturbation magnitudes than the factors it did not prioritize.
 
 Replication in an independent in vivo tonsil B-cell dataset
@@ -636,10 +636,10 @@ B-cell dataset, in which the germinal-centre reaction proceeds in vivo rather th
 the two terminal states are germinal-centre B cells (9,653 cells) and plasma cells (912 cells). GRN
 inference, single-TF knockout simulation and perturbation scoring were carried out within that
 dataset, so the vector field, the network and the scores are entirely independent of the in vitro
-system. The FIREFate state-specific and episodic TF sets, restricted as before to the factors
+system. The FocalFire state-specific and episodic TF sets, restricted as before to the factors
 present in the tonsil GRN, were then compared against the remaining scored factors with the same
 one-sided Mann--Whitney :math:`U` test on the overall perturbation magnitude. Because the TF sets
-were fixed before this dataset was scored, this is a direct test of whether the regulators FIREFate
+were fixed before this dataset was scored, this is a direct test of whether the regulators FocalFire
 identifies in vitro remain the high-impact regulators of the same fate decision in vivo.
 
 Optimal-transport reconstruction of ancestor--descendant couplings
@@ -672,7 +672,7 @@ the earlier time gives rise to a cell at the later one. Aggregating a coupling b
 the forward (descendant) and backward (ancestor) transition matrices between the states of
 consecutive windows; pushing a state forward or pulling a state backward through the couplings
 gives, for every individual cell, its probability of descending from or giving rise to that state.
-This is where the OT reconstruction and FIREFate meet: the pseudotime ordering, the episodes and
+This is where the OT reconstruction and FocalFire meet: the pseudotime ordering, the episodes and
 the phases assert an ancestor--descendant structure that the couplings estimate from the measured
 data alone.
 
@@ -690,7 +690,7 @@ descendants were restricted to those annotated ``GC-2``, and TF expression was c
 the descendant probability, giving the factors that mark the phenotype the predisposed population
 actually reaches. Recovering the same regulators here, from couplings estimated without any GRN,
 pseudotime or force model, provides model-independent support for the dynamic TF activity that
-FIREFate infers.
+FocalFire infers.
 
 
 Fate prediction of early activated B cells
@@ -715,7 +715,7 @@ trained model was subsequently applied to early ABCs from the multi-omic dataset
 using the same prediction function to generate and project fate probabilities.
 
 We then used the inferred cellular programs from single-cell TF Perturb-seq data in the B-cell
-system. FIREFate projected these programs onto ABCs (days 2 and 4) from single-cell multi-ome
+system. FocalFire projected these programs onto ABCs (days 2 and 4) from single-cell multi-ome
 data to estimate their transcriptional predisposition toward one of two downstream fates (GC or
 PB). The latent cellular programs defined a score for each cell, representing the degree to which
 its expression profile aligned with either the knockout or control state. Using these scores, we
@@ -724,7 +724,7 @@ separated knockout and control cell populations. For each model, we defined an o
 based on the distribution that most effectively distinguished these two groups. We then applied
 the same trained models to the day 2 and day 4 ABC multi-ome data using the ``predZ`` function in
 the SLIDE package, generating predicted scores for uncommitted cells. Using the thresholds defined
-from the Perturb-seq models, FIREFate assigned a predicted fate score to each ABC. Cells with
+from the Perturb-seq models, FocalFire assigned a predicted fate score to each ABC. Cells with
 predicted scores above or below the knockout--control threshold were classified as transcriptionally
 predisposed toward different downstream fates.
 
@@ -733,7 +733,7 @@ assess whether the predicted fate could be distinguished from the true fate labe
 cells from the single-cell multi-ome dataset). Two scenarios were defined: first, if a predicted
 fate could not be distinguished from the true identity based on transcriptional features, the cell
 was assigned to the same identity. Conversely, if the predicted fate could be confidently
-discriminated from the true identity, we inferred that FIREFate did not specify the cell as
+discriminated from the true identity, we inferred that FocalFire did not specify the cell as
 belonging to the predicted fate. This framework produced classification-loss scores that
 quantified the predictive confidence of rollback analysis, thereby enabling evaluation of the
 model's performance in capturing early fate bias.

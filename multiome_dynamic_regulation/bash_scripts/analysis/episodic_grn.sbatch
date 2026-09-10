@@ -8,7 +8,7 @@
 #SBATCH --array=1-6
 
 # Set working directory where the python script is located
-WORK_DIR="/ocean/projects/cis240075p/asachan/methods/FIREFate/multiome_dynamic_regulation/py_scripts/analysis"
+WORK_DIR="/ocean/projects/cis240075p/asachan/methods/FocalFire/multiome_dynamic_regulation/py_scripts/analysis"
 cd $WORK_DIR || { echo "Error: Could not change directory to $WORK_DIR"; exit 1; }
 
 # Load necessary modules and activate the environment

@@ -3,8 +3,8 @@ State-specific
 What separates two *fixed* cell states, and what happens when the regulators of that
 difference are perturbed (capabilities 2 and static 5; 1 and 6 to follow).
 
-.. module:: firefate.state_specific
-.. currentmodule:: firefate
+.. module:: focalfire.state_specific
+.. currentmodule:: focalfire
 
 Manager
 -------

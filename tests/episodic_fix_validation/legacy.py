@@ -1,6 +1,6 @@
 """Verbatim pre-fix implementations, kept so the fix can be A/B-tested on real data.
 
-Two defects were fixed in ``src/firefate/temporal/`` (both `CONFIRMED` in
+Two defects were fixed in ``src/focalfire/temporal/`` (both `CONFIRMED` in
 ``tests/temporal/ISSUES.md``):
 
 * **#1** ``calculate_force_curves_chunk`` paired TF expression ordered by
@@ -14,20 +14,20 @@ The functions below reproduce the old behaviour **exactly**, including the chunk
 so ``run_validation.py`` can compute both versions from identical inputs and attribute
 any difference in the enrichment tables to the fix rather than to a rerun.
 
-Nothing here is importable from ``firefate``; it is frozen dead code by design.
+Nothing here is importable from ``focalfire``; it is frozen dead code by design.
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-from firefate.utils.parallel import create_balanced_chunks
+from focalfire.utils.parallel import create_balanced_chunks
 
 
 def legacy_calculate_force_curves_chunk(
     beta_chunk: pd.DataFrame, tf_expression: pd.DataFrame, epsilon: float = 1e-10
 ) -> pd.DataFrame:
-    """Pre-fix ``firefate.temporal._forces.calculate_force_curves_chunk`` (ISSUES #1).
+    """Pre-fix ``focalfire.temporal._forces.calculate_force_curves_chunk`` (ISSUES #1).
 
     The two lines that matter are ``value_counts()`` (count order) followed by
     ``np.repeat(..., index=beta_chunk.index)`` (row order).

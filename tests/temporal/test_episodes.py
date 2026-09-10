@@ -23,13 +23,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from firefate.temporal import (
+from focalfire.temporal import (
     AlignTimeScales,
     EpisodeDynamics,
     run_episodic_construction,
     run_episodic_enrichment,
 )
-from firefate.temporal import SmoothedCurvesGRN
+from focalfire.temporal import SmoothedCurvesGRN
 from conftest import (
     CONSTANT_LCPM,
     MOCK_EDGES,
@@ -177,7 +177,7 @@ class TestBuildEpisodeGrn:
 
     def test_znf_and_zbtb_regulators_are_dropped(self, episode):
         # ISSUES.md #12 -- BY DESIGN, not a defect: ZNF*/ZBTB* factors are not
-        # relevant to FIREFate's biology and are dropped deliberately.  This is a
+        # relevant to FocalFire's biology and are dropped deliberately.  This is a
         # regression guard so the filter is not removed by accident.
         grn = episode.build_episode_grn(time_slice=slice(0, 5))
         # ZNF1 -> G1 is the strongest edge in the network and is still removed

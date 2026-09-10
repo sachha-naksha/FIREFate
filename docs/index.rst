@@ -1,15 +1,15 @@
-FIREFate
-========
-.. module:: firefate
+FocalFire
+=========
+.. module:: focalfire
 
 .. image:: _static/img/fig1_091026.png
     :width: 800px
     :align: center
-    :alt: The interpretable modules of FIREFate
+    :alt: The interpretable modules of FocalFire
 
 |
 
-**FIREFate** (Functional and Interpretable Regulatory Encoding of cellular Fate) combines
+**FocalFire** (Functional and Interpretable Regulatory Encoding of cellular Fate) combines
 mechanistic gene regulatory networks (GRNs) with interpretable machine learning to focus
 dense state-specific and dynamic GRNs onto the regulatory components that govern cell
 fate decisions. It works on single-cell RNA and ATAC data (sc/snRNA-seq, scATAC-seq),
@@ -49,7 +49,7 @@ The framework is three modules in one package, one per product in the figure abo
 Getting started
 ---------------
 - :doc:`Install <installation>` the package, then read the
-  :doc:`seven capabilities <capabilities>` for what FIREFate does and why.
+  :doc:`seven capabilities <capabilities>` for what FocalFire does and why.
 - :doc:`Methods <methods>` gives the formal description of each capability.
 - The :doc:`notebooks <notebooks/index>` show the framework applied end to end on
   B-cell and T-cell multiome data.
@@ -65,14 +65,14 @@ Important resources
         :link: installation
         :link-type: doc
 
-        Install ``firefate``, with or without the notebooks submodule.
+        Install ``focalfire``, with or without the notebooks submodule.
 
     .. grid-item-card:: Notebooks
         :link: notebooks/index
         :link-type: doc
 
         Analysis notebooks per module, from the companion
-        `firefate_notebooks <https://github.com/sachha-naksha/firefate_notebooks>`_
+        `focalfire_notebooks <https://github.com/sachha-naksha/focalfire_notebooks>`_
         repository.
 
     .. grid-item-card:: Contributing
@@ -82,7 +82,7 @@ Important resources
         Where new code goes, and the test conventions.
 
     .. grid-item-card:: Repository
-        :link: https://github.com/sachha-naksha/FIREFate
+        :link: https://github.com/sachha-naksha/FocalFire
         :link-type: url
 
         Source code, issues, and development on GitHub.

@@ -538,7 +538,7 @@ lands.
     (`test_episodes.py::TestBuildEpisodeGrn::test_znf_and_zbtb_regulators_are_dropped`)
 
     **Status: BY DESIGN.**  Confirmed intentional: `ZNF*`/`ZBTB*` factors are not
-    relevant to the biology FIREFate targets and are dropped deliberately.  Not a
+    relevant to the biology FocalFire targets and are dropped deliberately.  Not a
     defect.  The only thing left is that a reader of the code cannot tell this --
     a one-line comment or docstring sentence saying *why* would make the filter
     self-explanatory.  The test stays as a regression guard so the filter is not

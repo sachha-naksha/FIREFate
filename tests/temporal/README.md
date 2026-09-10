@@ -1,14 +1,14 @@
-# Tests for `firefate.temporal`
+# Tests for `focalfire.temporal`
 
-Coverage of `src/firefate/temporal/_episodes.py` and
-`src/firefate/temporal/_curves.py`: every public class and function, the
+Coverage of `src/focalfire/temporal/_episodes.py` and
+`src/focalfire/temporal/_curves.py`: every public class and function, the
 private fast paths, and the two process-level runners.
 
 ## Running
 
 ```bash
 conda activate dictys
-cd FIREFate
+cd FocalFire
 pytest tests/temporal -q                 # everything (~20 s)
 pytest tests/temporal -q -m "not slow"   # skip the tests that spawn worker processes
 ```
@@ -21,7 +21,7 @@ pytest tests/temporal -q -m "not slow"   # skip the tests that spawn worker proc
 | `test_curve_math.py` | AUC, transient/terminal logFC, switching time, curve characteristics, wave-pattern classification, static force curves |
 | `test_curves.py` | `SmoothedCurvesGRN` against a real dictys network: smoothed expression/regulation curves, the parallel regulation fast path, sub-network curves, beta curves |
 | `test_chromatin.py` | `SmoothedCurvesChromatin`: binding extraction, trajectory mapping, smoothing, both plots |
-| `test_episodic_units.py` | module-level helpers, now spread across three modules: the ORA primitive (`firefate.base`), edge filtering and force curves (`temporal/_forces.py`), chunking (`firefate.utils`), episode subsetting |
+| `test_episodic_units.py` | module-level helpers, now spread across three modules: the ORA primitive (`focalfire.base`), edge filtering and force curves (`temporal/_forces.py`), chunking (`focalfire.utils`), episode subsetting |
 | `test_episodes.py` | `AlignTimeScales`, the `EpisodeDynamics` workflow end to end, `run_episodic_construction` / `run_episodic_enrichment` |
 | `ISSUES.md` | defects and inconsistencies the suite found, each with the test that reproduces it |
 

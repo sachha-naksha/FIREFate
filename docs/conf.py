@@ -1,4 +1,4 @@
-"""Sphinx configuration for FIREFate."""
+"""Sphinx configuration for FocalFire."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from pathlib import Path
 _root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_root / "src"))
 
-project = "FIREFate"
+project = "FocalFire"
 copyright = "2026, Akanksha Sachan"
 author = "Akanksha Sachan"
 
 try:
-    from firefate import __version__ as release
+    from focalfire import __version__ as release
 except ImportError:
     release = "0.1.0"
 version = release
@@ -27,12 +27,12 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx_copybutton",
     "sphinx_design",
-    # Renders the notebooks pulled in from the firefate_notebooks submodule.
+    # Renders the notebooks pulled in from the focalfire_notebooks submodule.
     "myst_nb",
 ]
 
 # -- Notebooks ---------------------------------------------------------------
-# The notebooks live in their own repository (sachha-naksha/firefate_notebooks),
+# The notebooks live in their own repository (sachha-naksha/focalfire_notebooks),
 # checked out as a submodule at docs/notebooks. They are research records run on a
 # cluster against data that is not distributed, so they are NEVER executed here --
 # Sphinx renders the outputs stored in the .ipynb files as committed.
@@ -76,7 +76,7 @@ exclude_patterns = [
 html_theme = "furo"
 html_title = f"{project} {release}"
 html_static_path = ["_static"]
-html_logo = "_static/img/fig_1_bio.png"
+html_logo = "_static/img/fig1_091026.png"
 
 nitpicky = False
 

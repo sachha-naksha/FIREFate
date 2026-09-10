@@ -3,8 +3,8 @@ Utilities
 Helpers used by more than one module. The rule: if two subpackages need it, it lives
 here, not in whichever subpackage happened to need it first.
 
-.. module:: firefate.utils
-.. currentmodule:: firefate
+.. module:: focalfire.utils
+.. currentmodule:: focalfire
 
 Genes and networks
 ------------------

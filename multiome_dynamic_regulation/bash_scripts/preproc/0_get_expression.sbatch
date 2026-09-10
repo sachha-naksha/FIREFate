@@ -17,7 +17,7 @@ OUTPUT_PATH="$LOCAL/$OUTPUT_FILE"
 
 # Python script
 # Now a package entry point (was py_scripts/dynamic_grn/get_main_expression.py).
-# Requires `pip install -e .` from the FIREFate repo root in the dictys env.
+# Requires `pip install -e .` from the FocalFire repo root in the dictys env.
 
 # Destination directory for the output
 DESTINATION_DIR="/ocean/projects/cis240075p/asachan/datasets/B_Cell/multiome_1st_donor_UPMC_aggr/dictys_outs/actb1_added_v2/data"
@@ -37,6 +37,6 @@ set -eo pipefail
 cd $LOCAL/
 
 # Run the python script with correct arguments
-python -m firefate.cli.expression_to_tsv "$LOCAL" "$OUTPUT_FILE"
+python -m focalfire.cli.expression_to_tsv "$LOCAL" "$OUTPUT_FILE"
 
 echo "get expression done"

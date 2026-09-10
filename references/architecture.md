@@ -1,12 +1,12 @@
-# FIREFate Architecture
+# FocalFire Architecture
 
 > **Sections 6 and 10 are superseded** by `references/module_structure_plan.md`, which
-> restructures the package along the three FIREFate modules (Temporal, StateSpecific,
+> restructures the package along the three FocalFire modules (Temporal, StateSpecific,
 > CrossPrediction) instead of the capability-per-subpackage split described below.
 > Sections 1-5, 7 and 8 (design principles, src-layout, composition over inheritance,
 > managers, types, logging) still hold and the new layout follows them.
 
-Design principles and code structure for FIREFate. Read before any refactor, module addition, or
+Design principles and code structure for FocalFire. Read before any refactor, module addition, or
 "how should I organize this" question.
 
 ## Table of Contents
@@ -25,32 +25,32 @@ Design principles and code structure for FIREFate. Read before any refactor, mod
 
 ## 1. Design principles
 
-FIREFate follows **library mode** from the `coding-style` skill (moscot-style), not research mode.
-This is because FIREFate is a public-facing package that others will import, not a one-off
+FocalFire follows **library mode** from the `coding-style` skill (moscot-style), not research mode.
+This is because FocalFire is a public-facing package that others will import, not a one-off
 experiment.
 
 The three commitments this entails:
 
 - **Public surface is the seven capabilities.** Everything else is `_private`. A user should be
-  able to `import firefate as ff` and call `ff.discover_cps(...)`, `ff.build_episodic_grn(...)`,
+  able to `import focalfire as ff` and call `ff.discover_cps(...)`, `ff.build_episodic_grn(...)`,
   `ff.ora(...)`, etc. without ever touching an underscore-prefixed symbol.
 - **Types on every public signature.** `def f(adata: AnnData, key: str) -> pd.DataFrame:` — never
   untyped public functions. Internals can be untyped if they're obvious.
 - **No magic absolute paths, no HPC-specific defaults in the package.** Cluster paths live in
-  tutorials and SLURM scripts, never in `src/firefate/`.
+  tutorials and SLURM scripts, never in `src/focalfire/`.
 
 ## 2. src/-layout vs flat-layout
 
 Use **src/-layout**:
 ```
-FIREFate/
-├── src/firefate/
+FocalFire/
+├── src/focalfire/
 │   └── __init__.py
 ├── tests/
 └── pyproject.toml
 ```
 
-Not the flat layout (`firefate/` directly under repo root alongside `pyproject.toml`). Reasons:
+Not the flat layout (`focalfire/` directly under repo root alongside `pyproject.toml`). Reasons:
 
 - **Forces correct installation.** With `src/`-layout, you cannot accidentally import from the repo
   root — only from the installed package. This catches "works on my laptop, fails when pip
@@ -91,7 +91,7 @@ filters. Neither inherits from domain classes.
 Based on the current implemented codebase:
 
 ```
-firefate.core
+focalfire.core
 ├── SmoothedCurvesGRN                # β(t), E_TF(t), LCPM(t) over pseudotime
 │   ├── get_smoothed_curves()        # modes: expression / regulation / tf_expression / weighted
 │   ├── get_beta_curves()            # β-curves for specified TF→target links
@@ -120,7 +120,7 @@ firefate.core
     ├── annotate_lf_in_grn()
     └── calculate_enrichment()       # hypergeometric ORA
 
-firefate.managers (NEW — unification layer)
+focalfire.managers (NEW — unification layer)
 ├── GRNManager                       # unified GRN construction across resolutions
 │   ├── build_transition_window()
 │   ├── build_episodic()
@@ -131,10 +131,10 @@ firefate.managers (NEW — unification layer)
     ├── enrich_all_episodes()
     └── batch_from_config()
 
-firefate.enrichment
+focalfire.enrichment
 └── ora()                            # primitive: hypergeometric test (M, n, N, X)
 
-firefate.utils
+focalfire.utils
 ├── gene_utils                       # get_tf_indices, get_gene_indices, check_if_gene_in_ndict
 └── plots                            # regulation heatmaps, force heatmaps, dotplots, clustering
 ```
@@ -496,7 +496,7 @@ class GRNManager:
 
 ## 6. Module organization
 
-Each subpackage under `firefate/` corresponds to one or more capabilities:
+Each subpackage under `focalfire/` corresponds to one or more capabilities:
 
 | Subpackage | Capabilities | Main entry points |
 |---|---|---|
@@ -514,10 +514,10 @@ subpackage first needed it. This prevents circular imports.
 
 ## 7. Type system
 
-Create `src/firefate/_types.py` (moscot pattern):
+Create `src/focalfire/_types.py` (moscot pattern):
 
 ```python
-"""Type aliases used across firefate."""
+"""Type aliases used across focalfire."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -558,18 +558,18 @@ EpisodeSlice_t = slice
 
 ## 8. Logging and errors
 
-Create `src/firefate/_logging.py`:
+Create `src/focalfire/_logging.py`:
 
 ```python
-"""Rich logger for firefate.
+"""Rich logger for focalfire.
 
-Users can silence with logging.getLogger("firefate").setLevel(logging.WARNING).
+Users can silence with logging.getLogger("focalfire").setLevel(logging.WARNING).
 """
 import logging
 
 from rich.logging import RichHandler
 
-logger = logging.getLogger("firefate")
+logger = logging.getLogger("focalfire")
 if not logger.handlers:
     handler = RichHandler(rich_tracebacks=True, show_time=False, show_path=False)
     handler.setFormatter(logging.Formatter("%(message)s"))
@@ -628,18 +628,18 @@ zarifeh_code/
 
 | Step | Source | Target | Notes |
 |---|---|---|---|
-| 1 | `pseudotime_curves.py` | `src/firefate/core/pseudotime_curves.py` | Both `SmoothedCurvesGRN` + `SmoothedCurvesChromatin` |
-| 2 | `episodic_dynamics.py` → `AlignTimeScales` | `src/firefate/core/align_time.py` | Own module for reuse |
-| 3 | `episodic_dynamics.py` → `EpisodeDynamics` | `src/firefate/core/episodic_dynamics.py` | Imports from core siblings |
-| 4 | `episodic_dynamics.py` → parallel functions | `src/firefate/core/force.py` | `calculate_force_curves_parallel`, `filter_edges_by_significance_and_direction` |
-| 5 | `episodic_dynamics.py` → `calculate_tf_episodic_enrichment` | `src/firefate/enrichment/ora.py` | The ORA primitive |
-| 6 | `episodic_dynamics.py` → `run_episodic_*` orchestrators | `src/firefate/managers/grn_manager.py` + `enrichment_manager.py` | Unified managers |
-| 7 | `utils_custom.py` → gene helpers | `src/firefate/utils/gene_utils.py` | `get_tf_indices`, `get_gene_indices`, `check_if_gene_in_ndict` |
-| 8 | `utils_custom.py` + `episode_plots.py` → plots | `src/firefate/utils/plots.py` | Merge all plotting code |
+| 1 | `pseudotime_curves.py` | `src/focalfire/core/pseudotime_curves.py` | Both `SmoothedCurvesGRN` + `SmoothedCurvesChromatin` |
+| 2 | `episodic_dynamics.py` → `AlignTimeScales` | `src/focalfire/core/align_time.py` | Own module for reuse |
+| 3 | `episodic_dynamics.py` → `EpisodeDynamics` | `src/focalfire/core/episodic_dynamics.py` | Imports from core siblings |
+| 4 | `episodic_dynamics.py` → parallel functions | `src/focalfire/core/force.py` | `calculate_force_curves_parallel`, `filter_edges_by_significance_and_direction` |
+| 5 | `episodic_dynamics.py` → `calculate_tf_episodic_enrichment` | `src/focalfire/enrichment/ora.py` | The ORA primitive |
+| 6 | `episodic_dynamics.py` → `run_episodic_*` orchestrators | `src/focalfire/managers/grn_manager.py` + `enrichment_manager.py` | Unified managers |
+| 7 | `utils_custom.py` → gene helpers | `src/focalfire/utils/gene_utils.py` | `get_tf_indices`, `get_gene_indices`, `check_if_gene_in_ndict` |
+| 8 | `utils_custom.py` + `episode_plots.py` → plots | `src/focalfire/utils/plots.py` | Merge all plotting code |
 | 9 | `config.py` | `tutorials/config.py` | HPC paths = tutorial-only, NOT in package |
-| 10 | `zarifeh_code/ESCAPE/*` | `src/firefate/enrichment/slide_grn.py` | SLIDE-GRN enrichment |
-| 11 | `zarifeh_code/SLIDE/*` | `src/firefate/programs/slide_interface.py` | Thin wrapper importing `loveslide` |
-| 12 | Create | `src/firefate/__init__.py` | Seven public entry points + manager classes |
+| 10 | `zarifeh_code/ESCAPE/*` | `src/focalfire/enrichment/slide_grn.py` | SLIDE-GRN enrichment |
+| 11 | `zarifeh_code/SLIDE/*` | `src/focalfire/programs/slide_interface.py` | Thin wrapper importing `loveslide` |
+| 12 | Create | `src/focalfire/__init__.py` | Seven public entry points + manager classes |
 | 13 | Create | `pyproject.toml` | See `references/pip-packaging.md` |
 | 14 | Create | `docs/` Sphinx skeleton | See `references/documentation.md` |
 | 15 | Archive | `zarifeh_code/` → branch `legacy-zarifeh` | Preserve lineage |

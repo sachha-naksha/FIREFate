@@ -1,7 +1,7 @@
 {
   "dynamic_h5": "/work/nvme/bhdw/asachan/data_files/firefate/bcell/outs/dynamic.h5",
   "lf_files": "/work/nvme/bhdw/asachan/data_files/firefate/bcell/latent_factors/feature_list_Z11_GC_PB.txt,/work/nvme/bhdw/asachan/data_files/firefate/bcell/latent_factors/feature_list_Z3_GC_PB.txt",
-  "outdir": "/projects/bhdw/asachan/methods/firefate_codebases/FIREFate/tests/episodic_fix_validation/results",
+  "outdir": "/projects/bhdw/asachan/methods/focalfire_codebases/FocalFire/tests/episodic_fix_validation/results",
   "branches": "pb,gc",
   "num_points": 20,
   "points_per_episode": 5,

@@ -1,13 +1,13 @@
 Backends
 ~~~~~~~~
-Third-party engines FIREFate drives, each behind its own subpackage. Every
+Third-party engines FocalFire drives, each behind its own subpackage. Every
 ``import dictys`` lives here rather than in the domain modules, so the engines stay
 swappable and the domain code stays testable against fakes.
 
 The celloracle and SLIDE-R backends land with the StateSpecific port.
 
-.. module:: firefate.backends
-.. currentmodule:: firefate
+.. module:: focalfire.backends
+.. currentmodule:: focalfire
 
 dictys
 ------

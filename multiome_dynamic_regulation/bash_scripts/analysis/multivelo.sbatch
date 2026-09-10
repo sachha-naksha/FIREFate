@@ -26,7 +26,7 @@ scipy.sparse.csr_matrix.A = property(lambda self: self.toarray())
 # Allow nullable strings for any downstream writes
 anndata.settings.allow_write_nullable_strings = True
 
-CACHE = "/projects/bgdb/asachan/methods/FIREFate/multiome_dynamic_regulation/py_scripts/trajectory/.cache"
+CACHE = "/projects/bgdb/asachan/methods/FocalFire/multiome_dynamic_regulation/py_scripts/trajectory/.cache"
 OUT_DIR = "/work/hdd/bgdb/asachan/datasets/B_cell_dictys_actb1_added_v2/multivelo_results"
 os.makedirs(OUT_DIR, exist_ok=True)
 

@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from firefate.temporal import (
+from focalfire.temporal import (
     EpisodeDynamics,
     RegulatoryPhases,
     TFForceWaves,
@@ -20,7 +20,7 @@ from firefate.temporal import (
     mean_force,
     softmax_peak,
 )
-from firefate.temporal import _phases, _reductions
+from focalfire.temporal import _phases, _reductions
 
 COLS = [f"time_{i}" for i in range(6)]
 DTIME = np.linspace(0.0, 1.0, 6)

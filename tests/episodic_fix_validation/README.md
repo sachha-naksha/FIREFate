@@ -1,7 +1,7 @@
 # Does the episodic-force fix change the TF enrichment?
 
 Validation harness for two `CONFIRMED` defects from [`../temporal/ISSUES.md`](../temporal/ISSUES.md),
-both fixed in `src/firefate/temporal/`:
+both fixed in `src/focalfire/temporal/`:
 
 | # | where | what was wrong | fix |
 |---|---|---|---|
@@ -18,7 +18,7 @@ For every (branch, episode) the expensive prefix — smoothing, `build_episode_g
 `filter_edges_by_significance_and_direction` — is computed **once**, then the run forks:
 
 ```
-                     ┌─ fixed  : current firefate.temporal
+                     ┌─ fixed  : current focalfire.temporal
 smoothing → episode  │
 GRN → edge filter ───┤
                      └─ legacy : legacy.py (verbatim pre-fix functions)
@@ -134,7 +134,7 @@ python run_validation.py --lf-files /path/to/feature_list_A.txt,/path/to/feature
 ## Running
 
 ```bash
-cd FIREFate/tests/episodic_fix_validation
+cd FocalFire/tests/episodic_fix_validation
 sbatch submit.sbatch                 # 4 cpus, 64G, 8h, account bhdw-delta-cpu
 ```
 

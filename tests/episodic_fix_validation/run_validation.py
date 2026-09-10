@@ -8,7 +8,7 @@ the run fork into two variants that differ solely in the two fixed functions:
 
     legacy : pre-fix TF-expression slice (ISSUES #3) + pre-fix positional force
              alignment (ISSUES #1), from ``legacy.py``
-    fixed  : the current ``firefate.temporal`` code
+    fixed  : the current ``focalfire.temporal`` code
 
 Both variants then go through *identical* downstream code (percentile edge selection,
 LF annotation, hypergeometric ORA), so any difference in the enrichment tables is
@@ -42,9 +42,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from firefate.base.enrichment import calculate_tf_episodic_enrichment
-from firefate.temporal._episodes import EpisodeDynamics
-from firefate.temporal._forces import calculate_force_curves_parallel
+from focalfire.base.enrichment import calculate_tf_episodic_enrichment
+from focalfire.temporal._episodes import EpisodeDynamics
+from focalfire.temporal._forces import calculate_force_curves_parallel
 from legacy import legacy_calculate_force_curves, legacy_compute_tf_expression
 from slim_loader import load_slim
 
