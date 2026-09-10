@@ -1,21 +1,16 @@
+# FocalFire
 
-This repository provides an open-source toolkit, which delivers multi-scale insights at the cell-population, gene-regulatory and epigenomic levels to predict fate-bias during cell state transitions, and infer regulatory components governing cell fate decisions. The framework is built for single-cell (sc-snRNA/scATAC-seq) datasets for both matched or un-matched multi-omic sequenced populations.
+**FocalFire** (Functional and Interpretable Regulatory Encoding of cellular Fate) is an open-source toolkit that combines mechanistic gene regulatory networks (GRNs) with interpretable machine learning to focus dense state-specific and dynamic GRNs onto the regulatory components that govern cell fate decisions. It works on single-cell RNA and ATAC data (sc/snRNA-seq, scATAC-seq), matched or unmatched.
 
-![Interpretable modules](docs/_static/img/fig_1_bio.png)
+![FocalFire overview](docs/_static/img/fig1_091026.png)
 
-Downstream tasks include - 
+What it does:
 
-1. Discovery of interpretable cellular programs (CPs) underlying phenotypically-contrasting cell states, arising from natural progression of cellular processes or fate-biasing interventions.
+- **Prioritized regulatory subnetworks.** Interpretable ML discovers sparse cellular programs (CPs) that separate contrasting cell states, and embeds them in state-specific and cross-state GRNs to surface the transcription factors (TFs) whose regulons are enriched for each program, including in-silico perturbation of the enriched TFs.
+- **Phase-resolved dynamic regulation.** Transition-window and episodic GRNs along pseudotime assign TF–target edges to regulatory phases inferred from pseudotemporal clustering, ordering waves of TF regulation and retaining the forces that stay invariant within each episode.
+- **Fate predisposition by transfer learning.** CPs learned from fate-switching perturbations (e.g. TF knockouts) versus controls stratify uncommitted populations in unperturbed data by their predicted fate bias.
 
-2. Prediction of fate-biased cell populations in uncommitted states during differentiation, using CPs inferred from intervention datasets (TF-KO)
-
-3. Construction of State-Specific GRNs, and a combined cross-state GRN whose connectivity spans both states in (1), for enrichment of Transcription Factor (TF) activity, which regulates the CP encoding the discriminative phenotype between states.
-
-4. Construction of Transition-Window-Specific GRNs, with clustered regulatory edges to temporally order waves of TF regulation.
-
-5. Construction of Episodic GRNs that capture TF–target forces held temporally invariant across each episode, for enrichment of dynamic TF epigenomic and regulatory activity within each CP, underlying cell fate.
-
-6. Quantification of in-silico perturbation effects from state-specific (DONE) /dynamic phenotypic shifts (TO-DO) induced by perturbing enriched TFs.
+The full description of all capabilities, the methods, the user and developer API, and the rendered analysis notebooks are on Read the Docs: **[focalfire.readthedocs.io](https://focalfire.readthedocs.io/)**.
 
 ## Notebooks
 

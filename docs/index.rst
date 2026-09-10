@@ -2,7 +2,7 @@ FIREFate
 ========
 .. module:: firefate
 
-.. image:: _static/img/fig_1_bio.png
+.. image:: _static/img/fig1_091026.png
     :width: 800px
     :align: center
     :alt: The interpretable modules of FIREFate
