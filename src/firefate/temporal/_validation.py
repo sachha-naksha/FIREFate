@@ -40,7 +40,7 @@ class TFForceValidation:
     class to split the comparison by branch-qualified phase.
     """
 
-    def __init__(self, waves, enriched_links, varname='w_in', mode='lineage'):
+    def __init__(self, waves, enriched_links, network_type='w_in', mode='lineage'):
         """
         Parameters
         ----------
@@ -52,16 +52,16 @@ class TFForceValidation:
             links are scored on demand).
         enriched_links : list of (TF, Target)
             The enriched / prioritized links (e.g. ``PB_links_plotting``).
-        varname : str
+        network_type : str
             Network variable used for random-link forces (matches the enriched
-            ``compute_forces`` call). Default ``'w_in'``.
+            ``compute_forces`` call). Default ``'w_in'``, the total-effect network.
         mode : {'lineage', 'combined'}
             See the class docstring.
         """
         self.selector = (waves if isinstance(waves, TFForceWaves.ForceSelector)
-                         else TFForceWaves.ForceSelector(waves, varname=varname))
+                         else TFForceWaves.ForceSelector(waves, network_type=network_type))
         self.enriched_links = [tuple(l) for l in enriched_links]
-        self.varname = varname
+        self.network_type = network_type
         self.mode = mode
         self.result_ = None      # tidy DataFrame after run()
 
@@ -172,10 +172,10 @@ class TFForceValidation:
                          out=np.zeros_like(n_total), where=n_total > 0)
         return np.where(comp > threshold)[0]
 
-    def _sample_present_links(self, windows, varname, n, rng):
-        """Sample ``n`` non-enriched links present in ``windows`` of the ``varname`` graph.
+    def _sample_present_links(self, windows, network_type, n, rng):
+        """Sample ``n`` non-enriched links present in ``windows`` of the ``network_type`` graph.
 
-        A link is "present" if its ``prop['es'][varname]`` edge is nonzero in any
+        A link is "present" if its ``prop['es'][network_type]`` edge is nonzero in any
         of ``windows`` (OR'd across them); edge weight is otherwise irrelevant to
         sampling. Every enriched TF row and enriched target column is zeroed out
         first (the "not-of-nodes"). ``n`` links are then drawn without replacement
@@ -184,7 +184,7 @@ class TFForceValidation:
         ``(TF, Target)`` links.
         """
         d = self.selector.any_waves().dictys_dynamic_object
-        net = d.prop['es'][varname]                 # (n_tf, n_target, n_window)
+        net = d.prop['es'][network_type]            # (n_tf, n_target, n_window)
         present = np.zeros(net.shape[:2], dtype=bool)
         for win in windows:
             present |= (np.asarray(net[:, :, win]) != 0)
@@ -303,7 +303,7 @@ class TFForceValidation:
     # ------------------------------------------------------------------
 
     @classmethod
-    def compare_sets(cls, branches, enriched_sets, varname='w_in',
+    def compare_sets(cls, branches, enriched_sets, network_type='w_in',
                      exclude='tf_and_target', random_state=0):
         """Compare several enriched link sets against ONE shared random null.
 
@@ -321,7 +321,7 @@ class TFForceValidation:
         enriched_sets : dict {label: list of (TF, Target)}
             One entry per enriched box (e.g. ``{'State-specific': ss_links,
             'Episodic': ep_links}``). Insertion order is preserved.
-        varname, exclude, random_state :
+        network_type, exclude, random_state :
             As in :meth:`run` (``exclude`` controls how the null stays
             "non-enriched"; the seed is reproducible).
 
@@ -332,13 +332,13 @@ class TFForceValidation:
         :meth:`plot_multi`.
         """
         selector = (branches if isinstance(branches, TFForceWaves.ForceSelector)
-                    else TFForceWaves.ForceSelector(branches, varname=varname))
+                    else TFForceWaves.ForceSelector(branches, network_type=network_type))
         rng = np.random.default_rng(random_state)
 
         # a union validator drives the shared random pool (excludes every enriched
         # TF/target across all sets)
         all_links = [tuple(l) for s in enriched_sets.values() for l in s]
-        v = cls(selector, enriched_links=all_links, varname=varname, mode='combined')
+        v = cls(selector, enriched_links=all_links, network_type=network_type, mode='combined')
 
         rows, max_n = [], 0
         for label, links in enriched_sets.items():
@@ -378,7 +378,7 @@ class TFForceValidation:
 
     @classmethod
     def compare_sets_by_phase(cls, branches, enriched_sets, switch_pseudotimes,
-                              varname='w_in', exclude='tf_and_target', random_state=0,
+                              network_type='w_in', exclude='tf_and_target', random_state=0,
                               n_tf=None, n_target=None,
                               top_k=5, temperature=1.0, method='weighted_mean'):
         """Per-(branch, phase) comparison of several enriched sets vs ONE shared null.
@@ -424,7 +424,7 @@ class TFForceValidation:
         with :meth:`plot_multi_by_phase`.
         """
         selector = (branches if isinstance(branches, TFForceWaves.ForceSelector)
-                    else TFForceWaves.ForceSelector(branches, varname=varname))
+                    else TFForceWaves.ForceSelector(branches, network_type=network_type))
         rng = np.random.default_rng(random_state)
         switch_by_branch = {b: np.sort(np.asarray(s, dtype=float))
                             for b, s in switch_pseudotimes.items()}
@@ -461,7 +461,7 @@ class TFForceValidation:
 
         # 2) ONE shared random null: non-enriched pool (all sets' TFs/targets
         #    removed), scored & phase-binned per branch, matched per (branch, phase).
-        v = cls(selector, enriched_links=all_links, varname=varname, mode='combined')
+        v = cls(selector, enriched_links=all_links, network_type=network_type, mode='combined')
         pool_links = v._build_random_pool(n_tf, n_target, exclude, rng)
         for branch in switch_by_branch:
             fc, dtime = selector.force_curves(pool_links, branch=branch)

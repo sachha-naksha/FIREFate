@@ -93,10 +93,11 @@ class TemporalManager(BaseManager):
             "sparsity": self._sparsity,
         }
 
-    def _episode_dynamics(self) -> EpisodeDynamics:
+    def _episode_dynamics(self, network_type: str) -> EpisodeDynamics:
         return EpisodeDynamics(
             dictys_dynamic_object=self._require_net("Episode construction"),
             output_folder=self._output_dir or "",
+            network_type=network_type,
             **self._kwargs,
         )
 
@@ -137,8 +138,12 @@ class TemporalManager(BaseManager):
         self,
         links: Sequence[tuple[str, str]] | None = None,
         mode: str = "expression",
+        network_type: str = "w_in",
     ) -> tuple[pd.DataFrame, pd.DataFrame | None, pd.Series]:
         """Beta curves (and forces, when ``links`` is given) over the whole window.
+
+        ``network_type`` selects the dictys network variable for the beta curves
+        (default ``"w_in"``, total effect, as for force waves).
 
         Returns
         -------
@@ -151,7 +156,7 @@ class TemporalManager(BaseManager):
             beta_curves, dtime = curves.get_smoothed_curves(mode="regulation")
             return self._store("transition_window", (beta_curves, None, dtime))
 
-        beta_curves, dtime = curves.get_beta_curves(list(links))
+        beta_curves, dtime = curves.get_beta_curves(list(links), network_type=network_type)
         tf_expression_df, _ = curves.get_smoothed_curves(mode="tf_expression")
         tfs = beta_curves.index.get_level_values(0).unique()
         tf_expression = tf_expression_df.loc[tfs].iloc[:, -1]
@@ -170,9 +175,15 @@ class TemporalManager(BaseManager):
         percentile: float = 98,
         pval_threshold: float = 0.001,
         n_processes: int = 16,
+        network_type: str = "w",
     ) -> pd.DataFrame:
-        """Build the episodic GRN for one episode and return its top edges."""
-        epi = self._episode_dynamics()
+        """Build the episodic GRN for one episode and return its top edges.
+
+        ``network_type`` selects the dictys network variable for the episodic beta
+        curves (default ``"w"``, direct effect; see :class:`EpisodeDynamics`). It is
+        stamped on the result as ``.attrs["network_type"]``.
+        """
+        epi = self._episode_dynamics(network_type)
         epi.compute_expression_curves()
         epi.build_episode_grn(time_slice=time_slice)
         epi.filter_edges(pval_threshold=pval_threshold, n_processes=n_processes)
@@ -188,6 +199,7 @@ class TemporalManager(BaseManager):
         percentile: float = 98,
         pval_threshold: float = 0.001,
         n_processes: int = 16,
+        network_type: str = "w",
         write: bool = False,
     ) -> dict[int, pd.DataFrame]:
         """Build every episodic GRN in sequence.
@@ -203,6 +215,7 @@ class TemporalManager(BaseManager):
                 percentile=percentile,
                 pval_threshold=pval_threshold,
                 n_processes=n_processes,
+                network_type=network_type,
             )
             out[episode] = grn
             if write:
@@ -222,15 +235,19 @@ class TemporalManager(BaseManager):
         percentile: float = 98,
         pval_threshold: float = 0.001,
         n_processes: int = 16,
+        network_type: str = "w",
     ) -> pd.DataFrame:
         """Enrich a cellular program against one episode's GRN.
+
+        ``network_type`` is passed to the episodic construction (default ``"w"``,
+        direct effect; see :meth:`build_episode`).
 
         Returns
         -------
         pd.DataFrame
             Columns ``TF, p_value, enrichment_score, genes_in_lf, genes_dwnstrm, weights``.
         """
-        epi = self._episode_dynamics()
+        epi = self._episode_dynamics(network_type)
         epi.compute_expression_curves()
         epi.set_lf_genes(list(lf_genes))
         epi.build_episode_grn(time_slice=time_slice)
@@ -250,6 +267,7 @@ class TemporalManager(BaseManager):
         percentile: float = 98,
         pval_threshold: float = 0.001,
         n_processes: int = 16,
+        network_type: str = "w",
         write: bool = False,
     ) -> dict[int, pd.DataFrame]:
         """Enrich ``lf_genes`` against every episode in sequence.
@@ -266,6 +284,7 @@ class TemporalManager(BaseManager):
                 percentile=percentile,
                 pval_threshold=pval_threshold,
                 n_processes=n_processes,
+                network_type=network_type,
             )
             out[episode] = enr
             if write:
@@ -325,6 +344,7 @@ def run_episodic_enrichment(
     dist=0.001,
     sparsity=0.01,
     percentile=98,
+    network_type="w",
 ):
     """Build and enrich one episode in a fresh process; returns the CSV path."""
     import dictys
@@ -343,6 +363,7 @@ def run_episodic_enrichment(
         slice(time_slice_start, time_slice_end),
         lf_genes,
         percentile=percentile,
+        network_type=network_type,
     )
     out_path = os.path.join(output_folder, f"enrichment_episode_{episode_idx}.csv")
     enrichment_df.to_csv(out_path, index=False)
@@ -360,8 +381,13 @@ def run_episodic_construction(
     dist=0.001,
     sparsity=0.01,
     percentile=98,
+    network_type="w",
 ):
-    """Build one episodic GRN in a fresh process; returns the parquet path."""
+    """Build one episodic GRN in a fresh process; returns the parquet path.
+
+    ``network_type`` (default ``"w"``) is stamped on both parquet files as
+    ``.attrs["network_type"]`` (read back by ``pandas.read_parquet``).
+    """
     import dictys
 
     net = dictys.net.dynamic_network.from_file(dictys_dynamic_object_path)
@@ -373,6 +399,7 @@ def run_episodic_construction(
         num_points=num_points,
         dist=dist,
         sparsity=sparsity,
+        network_type=network_type,
     )
     epi.compute_expression_curves()
     epi.build_episode_grn(time_slice=slice(time_slice_start, time_slice_end))

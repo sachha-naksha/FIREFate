@@ -747,9 +747,18 @@ refactor, in stages, so the shared parts are shared by construction:
   is the only implementation; `SmoothedCurvesGRN.calculate_force_curves` delegates
   to it and `calculate_force_curves_chunk` is an alias.  Pinned by
   `test_force_kernel.py`, which asserts every entry point is the same function.
-* Stage 2 (planned): a `varname` parameter on each consumer with the current
-  defaults (`w` for episodic construction, `w_in` for phases and validation),
-  threaded through the manager, and recorded on the outputs.
+* Stage 2 (2026-09-10, done): the beta network is a deliberate, per-context
+  choice -- direct effect for episodes, total effect for force waves / phases /
+  validation -- so it is now an explicit `network_type` parameter (renamed from
+  `varname`, which is kept only at the dictys `stat.net(varname=...)` boundary).
+  Defaults are unchanged: `"w"` on `EpisodeDynamics`, the manager's episodic
+  methods and the process-level runners; `"w_in"` on `TFForceWaves.compute_forces`,
+  `ForceSelector`, `TFForceValidation` (and its `compare_sets*`),
+  `get_beta_curves` and `build_transition_window`.  Every output frame carries
+  `.attrs["network_type"]`, which survives the parquet round trip.  Pinned by
+  `test_network_type.py`: the defaults, that an override reaches the beta curves
+  in every context, and that the episodic and wave forces of a link are equal
+  once both are given the same network (and differ under the defaults).
 
 ---
 

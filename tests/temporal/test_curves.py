@@ -278,7 +278,7 @@ class TestSubnetworkCurves:
 
 class TestBetaCurves:
     def test_values_match_the_smoothed_network(self, curves, mock_network):
-        beta, dtime = curves.get_beta_curves([("TFA", "G1"), ("TFB", "G4")], varname="w")
+        beta, dtime = curves.get_beta_curves([("TFA", "G1"), ("TFB", "G4")], network_type="w")
         ref = reference_smoothed_net(mock_network, varname="w")
         tf_pos = {name: i for i, name in enumerate(REGULATORS)}
         gene_pos = {name: i for i, name in enumerate(GENES)}
@@ -289,19 +289,19 @@ class TestBetaCurves:
         assert dtime.values == pytest.approx(np.linspace(0.0, 2.0, NUM_POINTS))
 
     def test_constant_edge_is_exactly_constant(self, curves):
-        beta, _ = curves.get_beta_curves([("TFA", "G1")], varname="w")
+        beta, _ = curves.get_beta_curves([("TFA", "G1")], network_type="w")
         assert beta.loc[("TFA", "G1")].values == pytest.approx(
             np.full(NUM_POINTS, MOCK_EDGES[("TFA", "G1")][0])
         )
 
-    @pytest.mark.parametrize("varname,scale", sorted(VARNAME_SCALE.items()))
-    def test_varname_selects_the_network_variant(self, curves, varname, scale):
-        beta, _ = curves.get_beta_curves([("TFA", "G1")], varname=varname)
+    @pytest.mark.parametrize("network_type,scale", sorted(VARNAME_SCALE.items()))
+    def test_network_type_selects_the_network_variant(self, curves, network_type, scale):
+        beta, _ = curves.get_beta_curves([("TFA", "G1")], network_type=network_type)
         assert beta.loc[("TFA", "G1")].values == pytest.approx(np.full(NUM_POINTS, 2.0 * scale))
 
-    def test_default_varname_is_w_in(self, curves):
+    def test_default_network_type_is_w_in(self, curves):
         default, _ = curves.get_beta_curves([("TFA", "G1")])
-        explicit, _ = curves.get_beta_curves([("TFA", "G1")], varname="w_in")
+        explicit, _ = curves.get_beta_curves([("TFA", "G1")], network_type="w_in")
         assert default.values == pytest.approx(explicit.values)
 
     def test_columns_are_time_labels(self, curves):
@@ -342,7 +342,7 @@ class TestBetaCurves:
         gene_pos = {name: i for i, name in enumerate(GENES)}
         beta, _ = curves.get_beta_curves(
             [("TFA", "G1"), ("NOT_A_TF", "G2"), ("TFB", "NOT_A_GENE"), ("TFB", "G4")],
-            varname="w",
+            network_type="w",
         )
         for tf, target in beta.index:
             assert beta.loc[(tf, target)].values == pytest.approx(
@@ -353,9 +353,9 @@ class TestBetaCurves:
         beta, _ = curves.get_beta_curves([("TFA", "G1"), ("TFA", "G1")])
         assert len(beta) == 1
 
-    def test_unknown_varname_raises(self, curves):
+    def test_unknown_network_type_raises(self, curves):
         with pytest.raises(AssertionError):
-            curves.get_beta_curves([("TFA", "G1")], varname="not_a_variable")
+            curves.get_beta_curves([("TFA", "G1")], network_type="not_a_variable")
 
 
 # --------------------------------------------------------------------------- #
@@ -381,7 +381,7 @@ class TestBetaCurvesFeedingForceCurves:
 
     @pytest.fixture
     def beta_and_expression(self, curves):
-        beta, _ = curves.get_beta_curves([("TFA", "G1"), ("TFB", "G4")], varname="w")
+        beta, _ = curves.get_beta_curves([("TFA", "G1"), ("TFB", "G4")], network_type="w")
         expr, _ = curves.get_smoothed_curves(mode="tf_expression")
         expr.columns = beta.columns
         return beta, expr

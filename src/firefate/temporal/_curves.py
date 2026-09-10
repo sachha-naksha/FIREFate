@@ -149,7 +149,7 @@ class SmoothedCurvesGRN:
 
         return pd.DataFrame(dy, index=stat1_net.names[0])
 
-    def _subnetwork_curves(self, TF_indices, target_indices, varname):
+    def _subnetwork_curves(self, TF_indices, target_indices, network_type):
         """Smoothed signed network for the given TF/target indices only.
 
         Computes just the requested sub-network instead of smoothing the whole
@@ -165,7 +165,7 @@ class SmoothedCurvesGRN:
         """
         # sample evenly spaced points along the trajectory
         pts, fsmooth = self.dictys_dynamic_object.linspace(self.trajectory_range[0], self.trajectory_range[1], self.num_points, self.dist)
-        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object, varname=varname))
+        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object, varname=network_type))
         fs = stat1_net.func_smooth
         pt = fs.func.__self__            # node-filtered dictys.traj.point
         data = fs.args[0]                # (n_reg, n_target, n_node), per-node network
@@ -188,10 +188,12 @@ class SmoothedCurvesGRN:
         dtime = pd.Series(stat.pseudotime(self.dictys_dynamic_object, pts).compute(pts)[0])
         return subnetworks, dtime
 
-    def get_beta_curves(self, specified_links: list, varname: str = 'w_in'):
+    def get_beta_curves(self, specified_links: list, network_type: str = 'w_in'):
         """
         get beta curves for specified links;
-        varname: 'w_in' for normalized total effect network, 'w_n' for normalized direct effect network, 'w' for non-normalized direct effect network
+        network_type: which dictys network variable supplies beta -- 'w_in' for the
+        normalized total (direct + indirect) effect network, 'w_n' for the normalized
+        direct effect network, 'w' for the non-normalized direct effect network.
         """
 
         # getting the TF and target indices for querying the network
@@ -201,7 +203,7 @@ class SmoothedCurvesGRN:
         target_indices = get_gene_indices(self.dictys_dynamic_object, target_list)
 
         # compute only the queried sub-network (the full GRN is never smoothed)
-        subnetworks, dtime = self._subnetwork_curves(TF_indices, target_indices, varname)
+        subnetworks, dtime = self._subnetwork_curves(TF_indices, target_indices, network_type)
 
         # _subnetwork_curves keeps only the TFs/targets present in the network, so
         # build the index from the same found TFs/targets (in TF_indices /

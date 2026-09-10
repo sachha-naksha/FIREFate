@@ -53,6 +53,7 @@ class TFForceWaves:
         self.regulon_tf_expression = None
         self.force_curves = None
         self.dtime = None
+        self.network_type = None
 
     # ------------------------------------------------------------------
     # Expression / regulation trajectories
@@ -87,17 +88,24 @@ class TFForceWaves:
     # Force waves
     # ------------------------------------------------------------------
 
-    def compute_forces(self, links, varname='w_in'):
+    def compute_forces(self, links, network_type='w_in'):
         """Compute and cache beta / TF-expression / force curves for ``links``.
 
+        ``network_type`` is the dictys network variable supplying beta (ISSUES.md
+        #23). Default ``'w_in'``, the total-effect network, so a force wave
+        includes regulation propagated through intermediates; pass ``'w'`` for the
+        direct-effect network that episodic construction uses by default. The
+        choice is stamped on ``force_curves.attrs['network_type']``.
+
         Returns the force-curve DataFrame and stores ``beta_curves``,
-        ``regulon_tf_expression``, ``force_curves`` and ``dtime`` on ``self``.
+        ``regulon_tf_expression``, ``force_curves``, ``dtime`` and
+        ``network_type`` on ``self``.
         """
         # beta-network curves and TF-expression curves are two independent dictys
         # `.compute` passes over the trajectory; overlap them (both release the GIL
         # in their NumPy/BLAS work).
         with ThreadPoolExecutor(max_workers=2) as ex:
-            beta_future = ex.submit(self.curves.get_beta_curves, links, varname=varname)
+            beta_future = ex.submit(self.curves.get_beta_curves, links, network_type=network_type)
             tf_future = ex.submit(self.curves.get_smoothed_curves, mode='tf_expression')
             beta_curves, dtime = beta_future.result()
             tf_expression, _ = tf_future.result()
@@ -107,11 +115,13 @@ class TFForceWaves:
         force_curves = SmoothedCurvesGRN.calculate_force_curves(
             beta_curves, regulon_tf_expression
         )
+        force_curves.attrs['network_type'] = network_type
 
         self.beta_curves = beta_curves
         self.regulon_tf_expression = regulon_tf_expression
         self.force_curves = force_curves
         self.dtime = dtime
+        self.network_type = network_type
         return force_curves
 
     def _require_forces(self):
@@ -158,7 +168,7 @@ class TFForceWaves:
         demand via the same GRN.
         """
 
-        def __init__(self, waves_by_branch, varname='w_in'):
+        def __init__(self, waves_by_branch, network_type='w_in'):
             """
             Parameters
             ----------
@@ -166,15 +176,16 @@ class TFForceWaves:
                 A single fitted branch, or a mapping of lineage name -> branch
                 (e.g. ``{'PB': waves_pb, 'GC': waves_gc}``). The branches are
                 assumed to share the same dictys universe.
-            varname : str
-                Network variable used for on-demand force curves. Default ``'w_in'``.
+            network_type : str
+                Network variable used for on-demand force curves. Default ``'w_in'``
+                (total effect), matching ``TFForceWaves.compute_forces``.
             """
             if isinstance(waves_by_branch, TFForceWaves):
                 waves_by_branch = {'lineage': waves_by_branch}
             if not waves_by_branch:
                 raise ValueError("ForceSelector needs at least one branch.")
             self.waves_by_branch = dict(waves_by_branch)
-            self.varname = varname
+            self.network_type = network_type
 
         @property
         def branches(self):
@@ -195,7 +206,7 @@ class TFForceWaves:
             cached = waves.force_curves
             if cached is not None and all(l in cached.index for l in links):
                 return cached.loc[links], waves.dtime
-            beta_curves, dtime = waves.curves.get_beta_curves(links, varname=self.varname)
+            beta_curves, dtime = waves.curves.get_beta_curves(links, network_type=self.network_type)
             tf_expression, _ = waves.curves.get_smoothed_curves(mode='tf_expression')
             regulon_tf_expression = tf_expression.loc[
                 beta_curves.index.get_level_values(0).unique()
@@ -203,6 +214,7 @@ class TFForceWaves:
             force_curves = SmoothedCurvesGRN.calculate_force_curves(
                 beta_curves, regulon_tf_expression
             )
+            force_curves.attrs['network_type'] = self.network_type
             return force_curves, dtime
 
         @staticmethod

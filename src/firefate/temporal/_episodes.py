@@ -35,8 +35,15 @@ class EpisodeDynamics:
     """
 
     def __init__(self, dictys_dynamic_object, output_folder, mode="expression",
-                 trajectory_range=(1, 3), num_points=40, dist=0.001, sparsity=0.01, n_processes=16):
-        
+                 trajectory_range=(1, 3), num_points=40, dist=0.001, sparsity=0.01, n_processes=16,
+                 network_type="w"):
+        """
+        network_type: dictys network variable that supplies the episodic beta curves
+        (ISSUES.md #23). Default ``"w"``, the direct-effect network: episodes ask
+        which TFs act on a gene within a window. Pass ``"w_in"`` to build episodes on
+        the total-effect network that phases and validation use by default. The
+        choice is stamped on every output frame as ``.attrs["network_type"]``.
+        """
         # Core parameters
         self.dictys_dynamic_object = dictys_dynamic_object
         self.output_folder = output_folder
@@ -46,6 +53,7 @@ class EpisodeDynamics:
         self.dist = dist
         self.sparsity = sparsity
         self.n_processes = n_processes
+        self.network_type = network_type
         
         # Initialize composed objects with same parameters
         self.curves = SmoothedCurvesGRN(
@@ -104,7 +112,7 @@ class EpisodeDynamics:
             self.num_points,
             self.dist,
         )
-        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object))
+        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object, varname=self.network_type))
         stat1_netbin = stat.fbinarize(stat1_net, sparsity=self.sparsity)
         dnet = stat1_net.compute(pts)
         dnetbin = stat1_netbin.compute(pts)
@@ -142,6 +150,7 @@ class EpisodeDynamics:
             ~episode_beta_dcurve.index.get_level_values(0).str.startswith("ZNF")
             & ~episode_beta_dcurve.index.get_level_values(0).str.startswith("ZBTB")
         ]
+        episode_beta_dcurve.attrs["network_type"] = self.network_type
         self.episode_beta_dcurve = episode_beta_dcurve
         return episode_beta_dcurve
 
@@ -214,9 +223,11 @@ class EpisodeDynamics:
             epsilon=epsilon,
             save_intermediate=False,
         )
+        force_curves.attrs["network_type"] = self.network_type
         self.force_curves = force_curves
         avg_force = force_curves.mean(axis=1)
         avg_force_df = avg_force.to_frame(name="avg_force")
+        avg_force_df.attrs["network_type"] = self.network_type
         self.avg_force_df = avg_force_df
         return avg_force_df
 
@@ -227,6 +238,7 @@ class EpisodeDynamics:
         threshold = np.percentile(np.abs(self.avg_force_df["avg_force"]), percentile)
         top_percent_mask = np.abs(self.avg_force_df["avg_force"]) >= threshold
         episodic_grn_edges = self.avg_force_df[top_percent_mask].copy()
+        episodic_grn_edges.attrs["network_type"] = self.network_type
         self.episodic_grn_edges = episodic_grn_edges
         return episodic_grn_edges
 
@@ -260,6 +272,7 @@ class EpisodeDynamics:
         episodic_grn_edges = episodic_grn_edges.sort_values(
             by="avg_force", ascending=False
         )
+        episodic_grn_edges.attrs["network_type"] = self.network_type
         self.episodic_grn_edges = episodic_grn_edges
         return episodic_grn_edges
 
