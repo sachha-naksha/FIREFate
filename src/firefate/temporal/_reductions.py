@@ -2,14 +2,17 @@
 
 A force curve is one row per ``(TF, Target)`` link and one column per sampled
 pseudotime point (see :func:`firefate.temporal._forces.calculate_force_curves`).
-Each analysis context collapses that row to a single number in its own way, and
-the difference is deliberate:
+A sampled point is an equidistant position along the trajectory at which the
+beta network is a Gaussian-smoothed blend of the surrounding pseudobulk windows;
+it is not itself a dictys window.  Each analysis context collapses that row to a
+single number in its own way, and the difference is deliberate:
 
 * :func:`mean_force` -- **episodic construction.**  Plain arithmetic mean of the
-  signed force over the episode window (zero time points count).  Safe there
-  because episodic edges have already passed the direction-invariance filter, so
-  the sign never flips inside the window and the mean is a typical magnitude with
-  a sign.
+  signed force over the episode's run of consecutive sampled points (five by
+  default; zero points count in the denominator).  Only edges that survived the
+  beta-level significance and direction-invariance filter reach this step, so
+  the sign never flips across those points and the mean is a typical magnitude
+  with a sign.
 * :func:`softmax_peak` -- **phase assignment.**  No mean: a softmax over ``|force|``
   picks the ``top_k`` time points and their weighted pseudotime is the link's
   peak.  Arbitrary links are scored here with no sign filter, so a mean could
@@ -26,10 +29,10 @@ import pandas as pd
 
 
 def mean_force(force_curves: pd.DataFrame) -> pd.Series:
-    """Episodic reduction: mean of the signed force over the window's time columns.
+    """Episodic reduction: mean of the signed force over the episode's sampled points.
 
-    Every column is a time point; zeros are included in the denominator.
-    Returns a Series indexed like ``force_curves``.
+    Every column is one sampled pseudotime point of the episode; zeros are
+    included in the denominator.  Returns a Series indexed like ``force_curves``.
     """
     return force_curves.mean(axis=1)
 
