@@ -506,8 +506,12 @@ lands.
     are identical to `dnet_episode`'s.  The binarisation is the most expensive
     step in the function and its result is discarded.
 
-    **Status: CONFIRMED** -- and worth more than the "low severity" label
-    suggests, given the function is currently too slow.  Two independent wins:
+    **Status: CONFIRMED; part 1 done (stage 4 of #23, 2026-09-10).**
+    `build_episode_grn` now takes its beta from `TFForceSource.full_beta_curves`,
+    which never binarises, and the smoothing is cached per source so consecutive
+    episodes reuse it.  Part 2 (smoothing only the episode's points) is moot
+    while the cache is shared across episodes.  Two independent wins, as
+    originally written:
 
     ```python
     # 1. drop the binarisation entirely: dnetbin_episode is only ever read for
@@ -768,9 +772,20 @@ refactor, in stages, so the shared parts are shared by construction:
   `ForceWavePhases.link_peak_pseudotimes` and `order_links` call them.  Pinned by
   `test_reductions.py`: what each computes, that the consumers route through
   them, and that the three give different numbers for one curve.
-* Stage 4 (planned): one cached force source per trajectory segment that both
-  the episodic and the wave paths draw forces from, so that a linear trajectory
-  is one segment and a branched one is several.
+* Stage 4 (2026-09-10, done): `TFForceSource` (`_source.py`) is the one place a
+  trajectory segment's forces come from: the sampled points and their
+  pseudotimes, the cached regulator expression, the beta network smoothed once
+  per `network_type` (`full_beta_curves`, sliced per episode) or for a link
+  subset (`beta_curves`), and the kernel call with the `network_type` stamp
+  (`force_curves_from_beta` / `force_curves`).  It has no default
+  `network_type`.  `TFForceWaves` and `EpisodeDynamics` each wrap one (or accept
+  a shared one via `source=`); `ForceSelector` scores on-demand links through it;
+  `TemporalManager.force_source()` builds one per manager and hands it to every
+  episode and `waves()` it creates, so eight episodes slice one smoothing instead
+  of repeating it.  Episodes keep only their beta-level invariance filter and
+  their reduction.  A linear trajectory is one source with no switches (one
+  phase); a branched one is one source per branch under `ForceSelector`.
+  Numbers unchanged; pinned by `test_force_source.py`.
 
 ### 24. `TemporalManager.build_transition_window` handed the force kernel a Series
 

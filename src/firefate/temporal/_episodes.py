@@ -12,10 +12,9 @@ import pandas as pd
 from dictys.net import stat
 from firefate.base.enrichment import calculate_tf_episodic_enrichment
 from firefate.temporal._align import AlignTimeScales
-from firefate.temporal._curves import SmoothedCurvesGRN
 from firefate.temporal._reductions import mean_force
+from firefate.temporal._source import TFForceSource
 from firefate.temporal._forces import (
-    calculate_force_curves_parallel,
     filter_edges_by_significance_and_direction,
 )
 from firefate.utils.genes import check_if_gene_in_ndict
@@ -37,41 +36,50 @@ class EpisodeDynamics:
 
     def __init__(self, dictys_dynamic_object, output_folder, mode="expression",
                  trajectory_range=(1, 3), num_points=40, dist=0.001, sparsity=0.01, n_processes=16,
-                 network_type="w"):
+                 network_type="w", source=None):
         """
         network_type: dictys network variable that supplies the episodic beta curves
         (ISSUES.md #23). Default ``"w"``, the direct-effect network: episodes ask
         which TFs act on a gene within a window. Pass ``"w_in"`` to build episodes on
         the total-effect network that phases and validation use by default. The
         choice is stamped on every output frame as ``.attrs["network_type"]``.
+
+        source: a shared :class:`TFForceSource` for this trajectory segment. When
+        given, its smoothing settings replace ``trajectory_range`` / ``num_points`` /
+        ``dist`` / ``sparsity`` and every episode built on it reuses one smoothing
+        of the beta network and one regulator-expression curve.
         """
+        if source is None:
+            source = TFForceSource(
+                dictys_dynamic_object,
+                trajectory_range=trajectory_range,
+                num_points=num_points,
+                dist=dist,
+                sparsity=sparsity,
+            )
+        self.source = source
+
         # Core parameters
-        self.dictys_dynamic_object = dictys_dynamic_object
+        self.dictys_dynamic_object = source.dictys_dynamic_object
         self.output_folder = output_folder
         self.mode = mode
-        self.trajectory_range = trajectory_range
-        self.num_points = num_points
-        self.dist = dist
-        self.sparsity = sparsity
+        self.trajectory_range = source.trajectory_range
+        self.num_points = source.num_points
+        self.dist = source.dist
+        self.sparsity = source.sparsity
         self.n_processes = n_processes
         self.network_type = network_type
         
-        # Initialize composed objects with same parameters
-        self.curves = SmoothedCurvesGRN(
-            dictys_dynamic_object=dictys_dynamic_object,
-            trajectory_range=trajectory_range,
-            num_points=num_points,
-            dist=dist,
-            sparsity=sparsity,
-            mode=mode
-        )
+        # The source's smoothing engine (shared with force waves when the source is)
+        self.curves = source.curves
+        self.curves.mode = mode
         
         self.time_aligner = AlignTimeScales(
-            dictys_dynamic_object=dictys_dynamic_object,
-            trajectory_range=trajectory_range,
-            num_points=num_points,
-            dist=dist,
-            sparsity=sparsity
+            dictys_dynamic_object=self.dictys_dynamic_object,
+            trajectory_range=self.trajectory_range,
+            num_points=self.num_points,
+            dist=self.dist,
+            sparsity=self.sparsity
         )
         
         # State variables
@@ -107,43 +115,13 @@ class EpisodeDynamics:
         """
         build the episodic grn (weighted and binarized) for the specified episode/time window.
         """
-        pts, fsmooth = self.dictys_dynamic_object.linspace(
-            self.trajectory_range[0],
-            self.trajectory_range[1],
-            self.num_points,
-            self.dist,
-        )
-        stat1_net = fsmooth(stat.net(self.dictys_dynamic_object, varname=self.network_type))
-        stat1_netbin = stat.fbinarize(stat1_net, sparsity=self.sparsity)
-        dnet = stat1_net.compute(pts)
-        dnetbin = stat1_netbin.compute(pts)
-        dnet_episode = dnet[:, :, time_slice]
-        dnetbin_episode = dnetbin[:, :, time_slice]
-
         # Remember which pseudotime points this episode spans, so that
         # compute_tf_expression() can take regulator expression from the SAME window.
         self.time_slice = time_slice
 
-        # Map indices to gene names
-        ndict = self.dictys_dynamic_object.ndict
-        index_to_gene = {idx: name for name, idx in ndict.items()}
-        target_names = [index_to_gene[idx] for idx in range(dnetbin_episode.shape[1])]
-        tf_gene_indices = [
-            self.dictys_dynamic_object.nids[0][tf_idx]
-            for tf_idx in range(dnetbin_episode.shape[0])
-        ]
-        tf_names = [index_to_gene[idx] for idx in tf_gene_indices]
-
-        # reshape to dataframe
-        index_tuples = [(tf, target) for tf in tf_names for target in target_names]
-        multi_index = pd.MultiIndex.from_tuples(index_tuples, names=["TF", "Target"])
-        n_tfs, n_targets, n_times = dnet_episode.shape
-        reshaped_data = dnet_episode.reshape(-1, n_times)
-        episode_beta_dcurve = pd.DataFrame(
-            reshaped_data,
-            index=multi_index,
-            columns=[f"time_{i}" for i in range(n_times)],
-        )
+        # Beta at the episode's sampled points from the shared source: the
+        # network_type network smoothed once per source and sliced per episode.
+        episode_beta_dcurve = self.source.full_beta_curves(self.network_type, time_slice)
         episode_beta_dcurve = episode_beta_dcurve[episode_beta_dcurve.sum(axis=1) != 0]
 
         # remove tfs with names starting with ZNF and ZBTB
@@ -216,15 +194,15 @@ class EpisodeDynamics:
         calculate force curves for the filtered episodic grn.
         """
         beta_curves_for_force = self.filtered_edges_p001.drop("p_value", axis=1)
-        force_curves = calculate_force_curves_parallel(
-            beta_curves=beta_curves_for_force,
+        force_curves = self.source.force_curves_from_beta(
+            beta_curves_for_force,
+            self.network_type,
+            time_slice=self.time_slice,
             tf_expression=self.tf_lcpm_episode,
             n_processes=n_processes,
             chunk_size=chunk_size,
             epsilon=epsilon,
-            save_intermediate=False,
         )
-        force_curves.attrs["network_type"] = self.network_type
         self.force_curves = force_curves
         avg_force = mean_force(force_curves)
         avg_force_df = avg_force.to_frame(name="avg_force")

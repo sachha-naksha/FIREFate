@@ -25,6 +25,7 @@ from firefate.temporal._chromatin import SmoothedCurvesChromatin
 from firefate.temporal._curves import SmoothedCurvesGRN
 from firefate.temporal._episodes import EpisodeDynamics
 from firefate.temporal._phases import ForceWavePhases
+from firefate.temporal._source import TFForceSource
 from firefate.temporal._validation import TFForceValidation
 from firefate.temporal._waves import TFForceWaves
 
@@ -71,6 +72,7 @@ class TemporalManager(BaseManager):
         self._num_points = num_points
         self._dist = dist
         self._sparsity = sparsity
+        self._source: TFForceSource | None = None
 
     # ------------------------------------------------------------------ #
     # helpers                                                              #
@@ -93,12 +95,25 @@ class TemporalManager(BaseManager):
             "sparsity": self._sparsity,
         }
 
+    def force_source(self) -> TFForceSource:
+        """The one :class:`TFForceSource` for this manager's trajectory segment.
+
+        Built on first use from the manager's smoothing settings and shared by
+        every episode and every :meth:`waves` object the manager creates, so they
+        draw beta, regulator expression and forces from the same cache.
+        """
+        if self._source is None:
+            self._source = TFForceSource(
+                self._require_net("Force source"), **self._kwargs
+            )
+        return self._source
+
     def _episode_dynamics(self, network_type: str) -> EpisodeDynamics:
         return EpisodeDynamics(
-            dictys_dynamic_object=self._require_net("Episode construction"),
+            dictys_dynamic_object=None,
             output_folder=self._output_dir or "",
             network_type=network_type,
-            **self._kwargs,
+            source=self.force_source(),
         )
 
     @staticmethod
@@ -303,11 +318,15 @@ class TemporalManager(BaseManager):
     def waves(self, **kwargs: Any) -> TFForceWaves:
         """A :class:`TFForceWaves` on this manager's trajectory.
 
-        Call :meth:`TFForceWaves.compute_forces` on the result to score a link set.
+        Without overrides it shares the manager's :meth:`force_source`; smoothing
+        overrides in ``kwargs`` build a standalone branch instead. Call
+        :meth:`TFForceWaves.compute_forces` on the result to score a link set.
         """
-        return TFForceWaves(
-            self._require_net("Force waves"), **{**self._kwargs, **kwargs}
-        )
+        if kwargs:
+            return TFForceWaves(
+                self._require_net("Force waves"), **{**self._kwargs, **kwargs}
+            )
+        return TFForceWaves(source=self.force_source())
 
     def phases(
         self,

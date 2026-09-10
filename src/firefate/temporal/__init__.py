@@ -39,6 +39,7 @@ from firefate.temporal._forces import (
     filter_edges_by_significance_and_direction,
     get_unique_regs_by_target,
 )
+from firefate.temporal._source import TFForceSource
 from firefate.temporal._reductions import (
     abs_max_force,
     mean_force,
@@ -94,6 +95,7 @@ __all__ = [
     "SmoothedCurvesChromatin",
     "SmoothedCurvesGRN",
     "StateFrequency",
+    "TFForceSource",
     "TFForceValidation",
     "TFForceWaves",
     "TemporalManager",

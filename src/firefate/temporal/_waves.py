@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from firefate.temporal._curves import SmoothedCurvesGRN
+from firefate.temporal._source import TFForceSource
 from firefate.temporal._reductions import abs_max_force
 import matplotlib
 import numpy as np
@@ -18,7 +18,7 @@ from plotly.subplots import make_subplots
 class TFForceWaves:
     """TF regulatory force waves over pseudotime.
 
-    Wraps :class:`SmoothedCurvesGRN` for one trajectory branch and exposes:
+    Wraps a :class:`TFForceSource` for one trajectory branch and exposes:
     expression / regulation trajectory plots, force-wave computation for a set of
     links, the 3D single-link force landscape, and the clustered force heatmap.
 
@@ -29,21 +29,27 @@ class TFForceWaves:
 
     def __init__(
         self,
-        dictys_dynamic_object,
+        dictys_dynamic_object=None,
         trajectory_range=(0, 2),
         num_points=100,
         dist=0.0005,
         sparsity=0.01,
+        source=None,
     ):
-        self.dictys_dynamic_object = dictys_dynamic_object
-        self.trajectory_range = trajectory_range
-        self.curves = SmoothedCurvesGRN(
-            dictys_dynamic_object,
-            trajectory_range=trajectory_range,
-            num_points=num_points,
-            dist=dist,
-            sparsity=sparsity,
-        )
+        """Pass either the dictys object plus smoothing settings, or a shared
+        :class:`TFForceSource` as ``source`` (its settings are then used)."""
+        if source is None:
+            source = TFForceSource(
+                dictys_dynamic_object,
+                trajectory_range=trajectory_range,
+                num_points=num_points,
+                dist=dist,
+                sparsity=sparsity,
+            )
+        self.source = source
+        self.dictys_dynamic_object = source.dictys_dynamic_object
+        self.trajectory_range = source.trajectory_range
+        self.curves = source.curves
 
         # Cached smoothed curves
         self._exp_curves = None      # (dy, dx)
@@ -104,19 +110,18 @@ class TFForceWaves:
         """
         # beta-network curves and TF-expression curves are two independent dictys
         # `.compute` passes over the trajectory; overlap them (both release the GIL
-        # in their NumPy/BLAS work).
+        # in their NumPy/BLAS work). Both come from the shared source.
         with ThreadPoolExecutor(max_workers=2) as ex:
-            beta_future = ex.submit(self.curves.get_beta_curves, links, network_type=network_type)
-            tf_future = ex.submit(self.curves.get_smoothed_curves, mode='tf_expression')
+            beta_future = ex.submit(self.source.beta_curves, links, network_type)
+            tf_future = ex.submit(self.source.tf_expression)
             beta_curves, dtime = beta_future.result()
-            tf_expression, _ = tf_future.result()
+            tf_expression = tf_future.result()
         regulon_tf_expression = tf_expression.loc[
             beta_curves.index.get_level_values(0).unique()
         ]
-        force_curves = SmoothedCurvesGRN.calculate_force_curves(
-            beta_curves, regulon_tf_expression
+        force_curves = self.source.force_curves_from_beta(
+            beta_curves, network_type, tf_expression=regulon_tf_expression
         )
-        force_curves.attrs['network_type'] = network_type
 
         self.beta_curves = beta_curves
         self.regulon_tf_expression = regulon_tf_expression
@@ -207,16 +212,7 @@ class TFForceWaves:
             cached = waves.force_curves
             if cached is not None and all(l in cached.index for l in links):
                 return cached.loc[links], waves.dtime
-            beta_curves, dtime = waves.curves.get_beta_curves(links, network_type=self.network_type)
-            tf_expression, _ = waves.curves.get_smoothed_curves(mode='tf_expression')
-            regulon_tf_expression = tf_expression.loc[
-                beta_curves.index.get_level_values(0).unique()
-            ]
-            force_curves = SmoothedCurvesGRN.calculate_force_curves(
-                beta_curves, regulon_tf_expression
-            )
-            force_curves.attrs['network_type'] = self.network_type
-            return force_curves, dtime
+            return waves.source.force_curves(links, self.network_type)
 
         # ``max_t |force(t)|`` per link -- the validation reduction (_reductions).
         abs_max = staticmethod(abs_max_force)
