@@ -229,9 +229,21 @@ class BindingPhases(RegulatoryPhases):
     a chromatin object (:class:`~focalfire.temporal._chromatin.SmoothedCurvesChromatin`
     or any object exposing ``pb_pseudotime``/``gc_pseudotime`` and
     ``series_pb``/``series_gc``) on one lineage. A TF's *per-phase binding score* is
-    the ``max`` of its smoothed binding-score curve over the windows falling in that
+    the ``max`` of its smoothed binding curve over the windows falling in that
     phase -- the analogue of the abs-max TF force used for link validation, with the
-    abs dropped since binding scores are non-negative.
+    abs dropped since binding values are non-negative.
+
+    With ``contrast=True`` the per-phase score is instead the **branch contrast**:
+    in-phase max on this lineage minus the TF's max over the *other* lineage's
+    windows (``other_window_indices``, typically that branch's post-bifurcation
+    windows). Use this when ranking TFs by *where* they bind rather than by how
+    strong their motif is: the raw dictys ``binding.tsv.gz`` ``score`` is a HOMER
+    motif log-odds that is nearly constant per TF along the trajectory, so a plain
+    in-phase max returns the same strongest-motif TFs on every branch and phase.
+    A contrast is positive only where a TF binds more on this branch than on the
+    other, so the top-k of the two branches cannot coincide. Pair it with
+    ``process_dynamics(metric='count', relative=True)`` so the contrast is on each
+    TF's min-max-normalised footprinted-site count.
 
     The selector replaces hand-picked TF panels: given a ``{category: [TF, ...]}``
     universe (e.g. the state-specific TFs vs the episodic TFs), it returns the top-k
@@ -247,7 +259,7 @@ class BindingPhases(RegulatoryPhases):
     _DEFAULT_CMAPS = ('Purples', 'Oranges', 'Greens', 'Blues', 'Reds')
 
     def __init__(self, switch_pseudotimes, chromatin_object, lineage,
-                 window_indices=None):
+                 window_indices=None, contrast=False, other_window_indices=None):
         """
         Parameters
         ----------
@@ -270,17 +282,31 @@ class BindingPhases(RegulatoryPhases):
             that trunk collapses both lineages onto the same top TFs. Restricting to
             the post-bifurcation windows keeps each lineage's phases lineage-specific.
             When ``None`` the full lineage series is used (legacy behaviour).
+        contrast : bool, default False
+            When True, :meth:`phase_score` returns the branch contrast (in-phase max
+            on this lineage minus the TF's max over the other lineage's windows)
+            instead of the plain in-phase max. See the class docstring.
+        other_window_indices : sequence of int, optional
+            Window IDs of the *other* lineage to take the reference max over when
+            ``contrast=True`` (e.g. ``GC_post_bifurcation_window_indices`` for a PB
+            instance). When ``None`` the other lineage's full series is used, which
+            includes the shared trunk.
         """
         super().__init__(switch_pseudotimes)
         self.lineage = lineage
+        self.contrast = bool(contrast)
         if lineage == 'pb':
             pseudotime = np.asarray(chromatin_object.pb_pseudotime)
             series = chromatin_object.series_pb
             traj_windows = np.asarray(chromatin_object.pb_indices)
+            other_series = chromatin_object.series_gc
+            other_windows = np.asarray(chromatin_object.gc_indices)
         elif lineage == 'gc':
             pseudotime = np.asarray(chromatin_object.gc_pseudotime)
             series = chromatin_object.series_gc
             traj_windows = np.asarray(chromatin_object.gc_indices)
+            other_series = chromatin_object.series_pb
+            other_windows = np.asarray(chromatin_object.pb_indices)
         else:
             raise ValueError("lineage must be 'pb' or 'gc'.")
         if not series:
@@ -292,6 +318,15 @@ class BindingPhases(RegulatoryPhases):
             series = {tf: np.asarray(v)[keep] for tf, v in series.items()}
         self.pseudotime = pseudotime
         self.series = series
+        # reference max of every TF on the other lineage (used when contrast=True)
+        self.other_max = {}
+        if self.contrast:
+            keep_o = (np.ones(len(other_windows), dtype=bool) if other_window_indices is None
+                      else np.isin(other_windows, np.asarray(list(other_window_indices))))
+            for tf, v in other_series.items():
+                vals = np.asarray(v, dtype=float)[keep_o]
+                vals = vals[~np.isnan(vals)]
+                self.other_max[tf] = float(vals.max()) if vals.size else np.nan
         # phase index (1-indexed) of every window on this lineage
         self.window_phase = self.phase_of(self.pseudotime)
         empty = [ph for ph in range(1, self.n_phases + 1)
@@ -329,12 +364,22 @@ class BindingPhases(RegulatoryPhases):
                 for cat, tfs in category_tfs.items()}
 
     def phase_score(self, tf, phase):
-        """Max binding score of ``tf`` over the windows in ``phase`` (NaN if none)."""
+        """Max binding value of ``tf`` over the windows in ``phase`` (NaN if none).
+
+        With ``contrast=True`` the other lineage's reference max (``other_max``) is
+        subtracted, so the score is how much more ``tf`` binds in this phase than
+        anywhere on the other branch (negative when it binds less).
+        """
         if tf not in self.series:
             return np.nan
         vals = np.asarray(self.series[tf], dtype=float)[self.window_phase == phase]
         vals = vals[~np.isnan(vals)]
-        return float(vals.max()) if vals.size else np.nan
+        if not vals.size:
+            return np.nan
+        score = float(vals.max())
+        if self.contrast:
+            score -= self.other_max.get(tf, np.nan)
+        return score
 
     def rank_tfs(self, tfs, phase):
         """``tfs`` ranked as ``(TF, score)`` by descending per-phase binding score.
